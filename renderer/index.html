@@ -587,6 +587,26 @@
           </div>
         </div>
         <div class="sec-group">
+          <h3 class="sec-sub">Accent Color</h3>
+          <p class="sec-desc">Change the highlight color used for buttons, borders, sliders, and active states across the whole app.</p>
+          <div id="accent-color-presets">
+            <button class="accent-color-opt active" data-accentcolor="default" title="Theme default" style="background:var(--accent);color:var(--accent-text)">Theme</button>
+            <button class="accent-color-opt" data-accentcolor="#2d8cf0" title="Blue" style="background:#2d8cf0;color:#fff">Blue</button>
+            <button class="accent-color-opt" data-accentcolor="#8b5cf6" title="Purple" style="background:#8b5cf6;color:#fff">Purple</button>
+            <button class="accent-color-opt" data-accentcolor="#ec4899" title="Pink" style="background:#ec4899;color:#fff">Pink</button>
+            <button class="accent-color-opt" data-accentcolor="#14b8a6" title="Teal" style="background:#14b8a6;color:#fff">Teal</button>
+            <button class="accent-color-opt" data-accentcolor="#4caf50" title="Green" style="background:#4caf50;color:#fff">Green</button>
+            <button class="accent-color-opt" data-accentcolor="#d97706" title="Amber" style="background:#d97706;color:#fff">Amber</button>
+            <button class="accent-color-opt" data-accentcolor="#ef4444" title="Red" style="background:#ef4444;color:#fff">Red</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+            <label style="font-size:12px;color:var(--text-secondary)">Custom:</label>
+            <input type="color" id="s-accent-color" value="#2d8cf0" style="width:40px;height:28px;border:none;border-radius:6px;cursor:pointer;background:none;padding:0"/>
+            <button class="sec-action-btn" onclick="applyCustomAccentColor()">Apply</button>
+            <button class="sec-action-btn" onclick="resetAccentColor()">Reset to Theme</button>
+          </div>
+        </div>
+        <div class="sec-group">
           <h3 class="sec-sub">Text Color</h3>
           <p class="sec-desc">Override the default text color for the current theme. Useful if you prefer warmer or cooler text on dark/light backgrounds.</p>
           <div id="text-color-presets">
