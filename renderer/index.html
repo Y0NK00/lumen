@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="tower-dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' http: https: ws: wss: data: blob:;">
+  <title>Lumen</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- ═══ TITLEBAR ═══ -->
+<div id="titlebar">
+  <div id="titlebar-drag">
+    <div id="app-logo">
+      <!-- Lumen mascot — friendly light bulb -->
+      <svg id="mascot" width="24" height="24" viewBox="0 0 32 32" fill="none">
+        <!-- Rays -->
+        <line x1="16" y1="1" x2="16" y2="4" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+        <line x1="25.5" y1="4.5" x2="23.4" y2="6.6" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+        <line x1="6.5" y1="4.5" x2="8.6" y2="6.6" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+        <line x1="29" y1="14" x2="26" y2="14" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+        <line x1="3" y1="14" x2="6" y2="14" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+        <!-- Bulb body -->
+        <circle cx="16" cy="14" r="8" fill="var(--accent)" opacity="0.85"/>
+        <!-- Base bands -->
+        <rect x="11.5" y="22" width="9" height="2" rx="0.8" fill="var(--accent)" opacity="0.72"/>
+        <rect x="12.5" y="24" width="7" height="1.8" rx="0.8" fill="var(--accent)" opacity="0.5"/>
+        <!-- Eyebrows -->
+        <path d="M11.5 11.5 Q13 10.5 14.5 11.5" stroke="white" stroke-width="1" fill="none" stroke-linecap="round" opacity="0.9"/>
+        <path d="M17.5 11.5 Q19 10.5 20.5 11.5" stroke="white" stroke-width="1" fill="none" stroke-linecap="round" opacity="0.9"/>
+        <!-- Eyes: white + colored iris + pupil + shine -->
+        <circle cx="13" cy="13.5" r="2" fill="white" class="eye"/>
+        <circle cx="19" cy="13.5" r="2" fill="white" class="eye"/>
+        <circle cx="13.4" cy="13.8" r="1.1" fill="#2a1a00"/>
+        <circle cx="19.4" cy="13.8" r="1.1" fill="#2a1a00"/>
+        <circle cx="12.6" cy="12.9" r="0.5" fill="white"/>
+        <circle cx="18.6" cy="12.9" r="0.5" fill="white"/>
+        <!-- Cheeks -->
+        <circle cx="10.5" cy="15.5" r="1.5" fill="#f87171" opacity="0.3"/>
+        <circle cx="21.5" cy="15.5" r="1.5" fill="#f87171" opacity="0.3"/>
+        <!-- Smile (curved, filled white crescent) -->
+        <path d="M12.5 17.5 Q16 20.5 19.5 17.5" stroke="white" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+      </svg>
+      <span id="app-name">Lumen</span>
+    </div>
+  </div>
+  <div id="titlebar-controls">
+    <button id="btn-minimize" title="Minimize">─</button>
+    <button id="btn-maximize" title="Maximize">□</button>
+    <button id="btn-close"    title="Close">✕</button>
+  </div>
+</div>
+
+<!-- ═══ APP SHELL ═══ -->
+<div id="app">
+
+  <!-- ── SIDEBAR ── -->
+  <aside id="sidebar">
+    <div id="sidebar-top">
+      <button id="btn-new-chat">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Chat
+      </button>
+      <button id="btn-search-chats" title="Search chats">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+    </div>
+
+    <div id="chat-search-bar" class="hidden">
+      <input id="chat-search-input" placeholder="Search conversations…" autocomplete="off" spellcheck="false"/>
+    </div>
+
+    <div id="projects-section">
+      <div class="sidebar-section-header">
+        <span class="sidebar-section-label">Projects</span>
+        <button id="btn-new-project" title="New Project">+</button>
+      </div>
+      <div id="new-project-input-row" class="hidden">
+        <input id="new-project-input" type="text" placeholder="Project name…" maxlength="60" autocomplete="off" spellcheck="false"/>
+        <button id="new-project-confirm" title="Create">✓</button>
+        <button id="new-project-cancel" title="Cancel">✕</button>
+      </div>
+      <div id="projects-list"></div>
+    </div>
+
+    <div id="conversations-wrapper">
+      <div id="conversations-list"></div>
+    </div>
+
+    <div id="sidebar-footer">
+      <button id="btn-profile">
+        <div id="prof-avatar">W</div>
+        <div id="prof-info">
+          <span id="prof-name">Will</span>
+          <span id="prof-email">dejavuyonko@gmail.com</span>
+        </div>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── MAIN CONTENT ── -->
+  <div id="main-wrap">
+
+    <!-- TOP TAB BAR -->
+    <nav id="top-tabs">
+      <button class="top-tab active" data-mode="chat">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Chat
+      </button>
+      <button class="top-tab" data-mode="driver">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M8.46 8.46a5 5 0 0 0 0 7.07"/></svg>
+        AI Driver
+      </button>
+      <button class="top-tab" data-mode="code">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        Code Bot
+      </button>
+      <button class="top-tab" data-mode="chrome">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>
+        Chrome
+      </button>
+    </nav>
+
+    <!-- PANELS (all stay in DOM for persistence) -->
+    <div id="panels">
+
+      <!-- ════ CHAT PANEL ════ -->
+      <div id="panel-chat" class="panel active">
+        <div id="chat-welcome">
+          <div class="welcome-mascot">
+            <!-- Lumen welcome mascot — large friendly light bulb -->
+            <svg width="96" height="96" viewBox="0 0 40 40" fill="none" class="mascot-large">
+              <!-- Soft outer glow -->
+              <circle cx="20" cy="18" r="16" fill="var(--accent)" opacity="0.07"/>
+              <!-- Rays (8 directions) -->
+              <line x1="20" y1="1" x2="20" y2="5" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" opacity="0.6"/>
+              <line x1="32" y1="6" x2="29.3" y2="8.7" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" opacity="0.6"/>
+              <line x1="8" y1="6" x2="10.7" y2="8.7" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" opacity="0.6"/>
+              <line x1="36.5" y1="18" x2="32.5" y2="18" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" opacity="0.6"/>
+              <line x1="3.5" y1="18" x2="7.5" y2="18" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" opacity="0.6"/>
+              <line x1="31" y1="29" x2="28.5" y2="26.5" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round" opacity="0.4"/>
+              <line x1="9" y1="29" x2="11.5" y2="26.5" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round" opacity="0.4"/>
+              <!-- Bulb body (circle) -->
+              <circle cx="20" cy="18" r="11" fill="var(--accent)" opacity="0.92"/>
+              <!-- Inner highlight (glass effect) -->
+              <ellipse cx="17" cy="12" rx="3.5" ry="2.5" fill="white" opacity="0.18"/>
+              <!-- Base bands -->
+              <rect x="14" y="28.5" width="12" height="2.5" rx="1.2" fill="var(--accent)" opacity="0.75"/>
+              <rect x="15" y="31" width="10" height="2.2" rx="1" fill="var(--accent)" opacity="0.55"/>
+              <rect x="16.5" y="33.2" width="7" height="2" rx="1" fill="var(--accent)" opacity="0.38"/>
+              <!-- Eyebrows (friendly arches) -->
+              <path d="M14.5 14 Q16.5 12.5 18.5 14" stroke="white" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.9"/>
+              <path d="M21.5 14 Q23.5 12.5 25.5 14" stroke="white" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.9"/>
+              <!-- Eyes: white sclera -->
+              <circle cx="16.5" cy="17" r="3" fill="white" class="eye"/>
+              <circle cx="23.5" cy="17" r="3" fill="white" class="eye"/>
+              <!-- Irises -->
+              <circle cx="17" cy="17.5" r="1.7" fill="#1a0d00"/>
+              <circle cx="24" cy="17.5" r="1.7" fill="#1a0d00"/>
+              <!-- Pupils -->
+              <circle cx="17.3" cy="17.7" r="0.9" fill="#000"/>
+              <circle cx="24.3" cy="17.7" r="0.9" fill="#000"/>
+              <!-- Eye shine (makes it look alive) -->
+              <circle cx="15.9" cy="15.9" r="0.8" fill="white"/>
+              <circle cx="22.9" cy="15.9" r="0.8" fill="white"/>
+              <!-- Cheeks (rosy) -->
+              <circle cx="13" cy="20" r="2.2" fill="#f87171" opacity="0.28"/>
+              <circle cx="27" cy="20" r="2.2" fill="#f87171" opacity="0.28"/>
+              <!-- Smile — wide and friendly -->
+              <path d="M15 22.5 Q20 27 25 22.5" stroke="white" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h1>What can I help with?</h1>
+          <p>Your private AI — running entirely on your own hardware.</p>
+          <div id="welcome-suggestions">
+            <button class="suggestion-chip" data-prompt="Help me write a professional email for ">✉️ Draft an email</button>
+            <button class="suggestion-chip" data-prompt="Explain this to me in simple terms: ">💡 Explain something</button>
+            <button class="suggestion-chip" data-prompt="Write a Python script that ">🐍 Write a script</button>
+            <button class="suggestion-chip" data-prompt="Help me research and summarize: ">🔍 Research a topic</button>
+            <button class="suggestion-chip" data-prompt="Help me plan and organize: ">📋 Plan something</button>
+            <button class="suggestion-chip" data-prompt="Review and improve this text: ">✏️ Edit my writing</button>
+          </div>
+        </div>
+
+        <div id="chat-messages"></div>
+
+        <!-- Hidden file input for attachments -->
+        <input type="file" id="file-attach-input" accept="image/*,.txt,.md,.json,.csv,.py,.js,.ts,.html,.css" multiple style="display:none"/>
+
+        <!-- Skill quick-picker popup -->
+        <div id="skill-popup" class="hidden">
+          <div class="skill-popup-header">Choose a Skill</div>
+          <div id="skill-popup-list"></div>
+          <div class="skill-popup-footer">
+            <button class="skill-popup-none" onclick="clearActiveSkill();closeSkillPopup()">✕ No Skill (General)</button>
+          </div>
+        </div>
+
+        <div id="chat-input-area">
+          <div id="context-chips"></div>
+          <div id="attach-previews"></div>
+          <div id="input-box">
+            <button id="btn-attach" title="Attach files or images">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <textarea id="chat-input" placeholder="Message Lumen…" rows="1"></textarea>
+            <button id="btn-send" title="Send (Enter)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+            </button>
+          </div>
+          <div id="input-footer">
+            <div id="model-selector-wrap">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+              <select id="model-select">
+                <option value="qwen2.5:14b">Qwen 2.5 · 14B</option>
+                <option value="qwen2.5:32b">Qwen 2.5 · 32B</option>
+                <option value="qwen2.5-coder:14b">Qwen Coder · 14B</option>
+                <option value="llama3.2:3b">Llama 3.2 · 3B (fast)</option>
+              </select>
+            </div>
+            <!-- Skill picker button -->
+            <button id="btn-skill-pick" title="Choose a skill / persona for this conversation">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              <span id="btn-skill-pick-label">Skill</span>
+            </button>
+            <span id="input-hint">↵ Send &nbsp;·&nbsp; ⇧↵ New line</span>
+            <button id="btn-vault" title="Search Obsidian vault and attach a note as context" onclick="openVaultModal()" style="display:none">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+              Vault
+            </button>
+            <button id="btn-save-obsidian" title="Save this conversation to Obsidian vault" onclick="saveToObsidian()" style="display:none">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+              Save to Obsidian
+            </button>
+            <div id="active-skill-chip" style="display:none" class="context-chip" title="Active skill — click to change">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              <span id="active-skill-chip-name">Skill</span>
+              <button onclick="clearActiveSkill()" title="Remove skill">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════ AI DRIVER PANEL ════ -->
+      <div id="panel-driver" class="panel">
+        <div class="panel-toolbar">
+          <div class="toolbar-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+            AI Driver
+          </div>
+          <span class="toolbar-sub">Browser automation — fill forms, apply to jobs, navigate the web</span>
+          <div class="toolbar-actions">
+            <button class="tool-btn" id="driver-reload">↺ Reload</button>
+            <button class="tool-btn" id="driver-popout">⬡ Open in browser</button>
+          </div>
+        </div>
+        <div class="webview-container">
+          <webview id="webview-driver" src="about:blank" allowpopups partition="persist:driver"></webview>
+          <div class="embed-overlay" id="driver-overlay">
+            <div class="overlay-card">
+              <svg class="overlay-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+              <h3>AI Driver</h3>
+              <p>Skyvern is not running or unreachable.</p>
+              <p class="overlay-sub">SSH into Tower and start it with:</p>
+              <div class="overlay-code">
+                <code>cd /mnt/user/appdata/skyvern && docker compose up -d</code>
+                <button class="copy-overlay-btn" data-copy='cd /mnt/user/appdata/skyvern && docker compose up -d'>Copy</button>
+              </div>
+              <p class="overlay-sub">Skyvern UI runs at <strong>http://10.0.0.22:8081</strong> · API at <strong>http://10.0.0.22:8000</strong></p>
+              <button class="overlay-retry-btn" id="driver-retry">↺ Retry Connection</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════ CODE BOT PANEL ════ -->
+      <div id="panel-code" class="panel">
+        <!-- Task input bar -->
+        <div id="code-task-bar">
+          <div id="code-task-input-wrap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            <textarea id="code-task-input" placeholder="Describe what you want to build, fix, or create…" rows="1"></textarea>
+            <button id="code-task-send">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+              Run Task
+            </button>
+          </div>
+          <div id="code-status-bar">
+            <span id="code-status-dot" class="status-dot idle"></span>
+            <span id="code-status-text">Ready</span>
+            <select id="code-model-select" title="Model for Code Bot">
+              <option value="qwen2.5-coder:14b">Qwen Coder 14B</option>
+              <option value="qwen2.5:14b">Qwen 2.5 14B</option>
+              <option value="qwen2.5:32b">Qwen 2.5 32B</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Code Bot tabs -->
+        <div id="code-tabs">
+          <button class="code-tab active" data-codetab="assistant">💬 Assistant</button>
+          <button class="code-tab" data-codetab="terminal">⬛ Terminal</button>
+          <button class="code-tab" data-codetab="openhands">🤖 OpenHands</button>
+        </div>
+
+        <!-- Assistant view -->
+        <div id="codetab-assistant" class="code-panel active">
+          <div id="code-messages">
+            <div class="code-welcome">
+              <p>Describe a task above. The AI will plan it, write code, and walk you through each step.</p>
+              <p class="code-welcome-sub">Tip: Be specific — "Write a Python script that reads a CSV, cleans null values, and outputs a summary report" works better than "write a script".</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Terminal view -->
+        <div id="codetab-terminal" class="code-panel">
+          <div id="terminal-wrap">
+            <div id="terminal-output">
+              <div class="term-line system">Tower AI Terminal — type a command below or use Code Bot to run tasks automatically</div>
+            </div>
+            <div id="terminal-input-row">
+              <span class="term-prompt">$</span>
+              <input type="text" id="terminal-input" placeholder="Enter shell command…" autocomplete="off" spellcheck="false"/>
+              <button id="terminal-send">Run</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- OpenHands view (webview stays loaded always) -->
+        <div id="codetab-openhands" class="code-panel">
+          <div class="webview-container" style="height:100%">
+            <webview id="webview-code" src="about:blank" allowpopups partition="persist:code"></webview>
+            <div class="embed-overlay" id="code-overlay">
+              <div class="spinner"></div>
+              <p>Loading OpenHands…</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════ CHROME PANEL ════ -->
+      <div id="panel-chrome" class="panel">
+        <div class="panel-toolbar">
+          <div class="toolbar-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
+            Chrome Control
+          </div>
+          <span class="toolbar-sub">Control Chrome with AI — browse, fill forms, extract data</span>
+          <div class="toolbar-actions">
+            <input id="chrome-url-input" type="text" placeholder="https://…" style="background:var(--bg-input);border:1px solid var(--border-strong);color:var(--text-primary);padding:6px 10px;border-radius:8px;font-size:12px;width:300px;outline:none;"/>
+            <button class="tool-btn" id="chrome-go">Go</button>
+            <button class="tool-btn" id="chrome-reload">↺ Reload</button>
+          </div>
+        </div>
+        <div style="display:flex;flex:1;overflow:hidden;gap:0">
+          <div class="webview-container" style="flex:1">
+            <webview id="webview-chrome" src="about:blank" allowpopups partition="persist:chrome"></webview>
+            <div class="embed-overlay" id="chrome-overlay">
+              <div class="overlay-card">
+                <svg class="overlay-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/></svg>
+                <h3>Chrome Control</h3>
+                <p>Browse any website and use AI to interact with it</p>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;width:100%">
+                  <button class="overlay-retry-btn" onclick="chromeGo('https://google.com')">🔍 Open Google</button>
+                  <button class="overlay-retry-btn" onclick="chromeGo('https://github.com')">💻 Open GitHub</button>
+                  <button class="overlay-retry-btn" onclick="chromeGo(document.getElementById('chrome-url-input').value)">→ Go to URL above</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="chrome-ai-panel">
+            <div id="chrome-ai-header">AI Assistant</div>
+            <div id="chrome-ai-messages"></div>
+            <div id="chrome-ai-input-row">
+              <textarea id="chrome-ai-input" placeholder="Ask about this page, click a button, fill a form…" rows="2"></textarea>
+              <button id="chrome-ai-send">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /panels -->
+  </div><!-- /main-wrap -->
+</div><!-- /app -->
+
+<!-- ═══ PROFILE POPUP ═══ -->
+<div id="profile-popup" class="hidden">
+  <div id="pp-user-row">
+    <div id="pp-avatar">W</div>
+    <div id="pp-user-info">
+      <div id="pp-name">Will</div>
+      <div id="pp-email">dejavuyonko@gmail.com</div>
+    </div>
+  </div>
+  <div class="pp-divider"></div>
+  <div class="pp-theme-row">
+    <span class="pp-label">Theme</span>
+    <div id="pp-theme-swatches">
+      <button class="swatch active" data-theme="tower-dark" title="Tower Dark"  style="background:#d97706"></button>
+      <button class="swatch"        data-theme="midnight"   title="Midnight"    style="background:#2d8cf0"></button>
+      <button class="swatch"        data-theme="forest"     title="Forest"      style="background:#4caf50"></button>
+      <button class="swatch"        data-theme="light"      title="Light"       style="background:#e5e7eb;border:1px solid #aaa"></button>
+      <button class="swatch"        data-theme="slate"      title="Slate"       style="background:#c6a0f6"></button>
+      <button class="swatch"        data-theme="sunset"     title="Sunset"      style="background:#f97316"></button>
+    </div>
+  </div>
+  <div class="pp-divider"></div>
+  <button class="pp-item" data-sec="general">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    Profile & General
+  </button>
+  <button class="pp-item" data-sec="appearance">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+    Appearance
+  </button>
+  <button class="pp-item" data-sec="capabilities">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Capabilities
+  </button>
+  <button class="pp-item" data-sec="connectors">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+    Connectors
+  </button>
+  <div class="pp-divider"></div>
+  <button class="pp-item" data-sec="about">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    About Lumen
+  </button>
+</div>
+
+<!-- ═══ SETTINGS FULL PAGE ═══ -->
+<div id="settings-panel" class="hidden">
+
+  <!-- Top bar -->
+  <div id="settings-topbar">
+    <button id="settings-close">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <span id="settings-topbar-title">Settings</span>
+  </div>
+
+  <!-- Body: left nav + content -->
+  <div id="settings-layout">
+
+    <!-- Left nav -->
+    <nav id="settings-nav">
+      <button class="snav-item active" data-sec="general">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        General
+      </button>
+      <button class="snav-item" data-sec="appearance">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        Appearance
+      </button>
+      <button class="snav-item" data-sec="capabilities">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Capabilities
+      </button>
+      <button class="snav-item" data-sec="connectors">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        Connectors
+        <span id="snav-conn-badge"></span>
+      </button>
+      <div class="snav-group-label">Advanced</div>
+      <button class="snav-item" data-sec="skills">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        Skills
+      </button>
+      <button class="snav-item" data-sec="memory">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        Memory
+      </button>
+      <button class="snav-item" data-sec="data">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+        Data & Privacy
+      </button>
+      <button class="snav-item" data-sec="about">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        About
+      </button>
+    </nav>
+
+    <!-- Content area -->
+    <div id="settings-content">
+
+      <!-- ── GENERAL (merged profile + server settings) ── -->
+      <div class="sec-page active" id="sec-general">
+        <h2 class="sec-h">General</h2>
+
+        <div class="sec-group">
+          <h3 class="sec-sub">Your Profile</h3>
+          <div class="field-row">
+            <label>Display Name</label>
+            <input type="text" id="s-display-name" placeholder="Your name"/>
+          </div>
+          <div class="field-row">
+            <label>What should Lumen call you?</label>
+            <input type="text" id="s-nickname" placeholder="e.g. Will"/>
+          </div>
+        </div>
+
+        <div class="sec-group">
+          <h3 class="sec-sub">What Lumen should know about you</h3>
+          <p class="sec-desc">This context is included in every conversation so Lumen can give better, more relevant responses.</p>
+          <textarea id="s-bio" rows="4" placeholder="e.g. I'm a homelab enthusiast running a self-hosted AI stack on Unraid. I prefer concise, technical answers. I work in software and am comfortable with the command line…" style="background:var(--bg-input);border:1px solid var(--border-strong);color:var(--text-primary);padding:9px 12px;border-radius:8px;font-size:13px;outline:none;resize:vertical;font-family:inherit;width:100%;box-sizing:border-box;"></textarea>
+        </div>
+
+        <div class="sec-group">
+          <h3 class="sec-sub">Server URLs</h3>
+          <div class="field-row">
+            <label>Ollama (AI engine)</label>
+            <input type="text" id="s-ollama" placeholder="http://10.0.0.22:11434"/>
+          </div>
+          <div class="field-row">
+            <label>AI Driver (Skyvern UI)</label>
+            <input type="text" id="s-skyvern" placeholder="http://10.0.0.22:8081"/>
+          </div>
+          <div class="field-row">
+            <label>Code Bot (OpenHands)</label>
+            <input type="text" id="s-openhands" placeholder="http://10.0.0.22:3001"/>
+          </div>
+        </div>
+
+        <div class="sec-group">
+          <h3 class="sec-sub">Default Chat Model</h3>
+          <div class="field-row">
+            <select id="s-model">
+              <option value="qwen2.5:14b">Qwen 2.5 — 14B (balanced)</option>
+              <option value="qwen2.5:32b">Qwen 2.5 — 32B (best quality)</option>
+              <option value="qwen2.5-coder:14b">Qwen Coder — 14B (code)</option>
+              <option value="llama3.2:3b">Llama 3.2 — 3B (fastest)</option>
+            </select>
+          </div>
+          <button id="btn-fetch-models" class="sec-action-btn">↺ Refresh model list from Ollama</button>
+          <div id="fetch-models-status"></div>
+        </div>
+
+        <div class="sec-save">
+          <button id="btn-save-settings" class="save-btn">Save Settings</button>
+        </div>
+      </div>
+
+      <!-- ── APPEARANCE ── -->
+      <div class="sec-page" id="sec-appearance">
+        <h2 class="sec-h">Appearance</h2>
+        <div class="sec-group">
+          <h3 class="sec-sub">Color Theme</h3>
+          <div id="theme-picker-full">
+            <button class="theme-opt" data-theme="tower-dark"><span class="to-swatch" style="background:#d97706"></span>Tower Dark</button>
+            <button class="theme-opt" data-theme="midnight"><span class="to-swatch" style="background:#2d8cf0"></span>Midnight</button>
+            <button class="theme-opt" data-theme="forest"><span class="to-swatch" style="background:#4caf50"></span>Forest</button>
+            <button class="theme-opt" data-theme="light"><span class="to-swatch" style="background:#e5e7eb;border:1px solid #ccc"></span>Light</button>
+            <button class="theme-opt" data-theme="slate"><span class="to-swatch" style="background:#c6a0f6"></span>Slate</button>
+            <button class="theme-opt" data-theme="sunset"><span class="to-swatch" style="background:#f97316"></span>Sunset</button>
+          </div>
+        </div>
+        <div class="sec-group">
+          <h3 class="sec-sub">Chat Font</h3>
+          <div id="font-picker">
+            <button class="font-opt active" data-font="default">
+              <span class="font-preview" style="font-family:Georgia,serif">Aa</span>
+              <span>Default</span>
+            </button>
+            <button class="font-opt" data-font="sans">
+              <span class="font-preview" style="font-family:-apple-system,sans-serif">Aa</span>
+              <span>Sans</span>
+            </button>
+            <button class="font-opt" data-font="system">
+              <span class="font-preview" style="font-family:system-ui">Aa</span>
+              <span>System</span>
+            </button>
+            <button class="font-opt" data-font="dyslexic">
+              <span class="font-preview" style="font-family:monospace">Aa</span>
+              <span>Dyslexic</span>
+            </button>
+          </div>
+        </div>
+        <div class="sec-group">
+          <h3 class="sec-sub">Font Size</h3>
+          <div class="range-row">
+            <input type="range" id="s-fontsize" min="12" max="20" step="1" value="14"/>
+            <span id="s-fontsize-label">14px</span>
+          </div>
+        </div>
+        <div class="sec-group">
+          <h3 class="sec-sub">Text Color</h3>
+          <p class="sec-desc">Override the default text color for the current theme. Useful if you prefer warmer or cooler text on dark/light backgrounds.</p>
+          <div id="text-color-presets">
+            <button class="text-color-opt active" data-textcolor="default" title="Theme default">Default</button>
+            <button class="text-color-opt" data-textcolor="#ffffff" title="Pure White" style="color:#fff;background:#333">White</button>
+            <button class="text-color-opt" data-textcolor="#ececec" title="Warm White" style="color:#ececec;background:#333">Warm</button>
+            <button class="text-color-opt" data-textcolor="#e6edf3" title="Cool White" style="color:#e6edf3;background:#333">Cool</button>
+            <button class="text-color-opt" data-textcolor="#111111" title="Near Black" style="color:#111;background:#f7f7f7">Dark</button>
+            <button class="text-color-opt" data-textcolor="#333333" title="Charcoal" style="color:#333;background:#f7f7f7">Charcoal</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+            <label style="font-size:12px;color:var(--text-secondary)">Custom:</label>
+            <input type="color" id="s-text-color" value="#ececec" style="width:40px;height:28px;border:none;border-radius:6px;cursor:pointer;background:none;padding:0"/>
+            <button class="sec-action-btn" onclick="applyCustomTextColor()">Apply</button>
+            <button class="sec-action-btn" onclick="resetTextColor()">Reset to Theme</button>
+          </div>
+        </div>
+        <div class="sec-group">
+          <h3 class="sec-sub">Voice</h3>
+          <p class="sec-desc">Configure voice preferences here. Toggle voice on/off from the <strong>Capabilities</strong> section.</p>
+          <div id="voice-picker"></div>
+          <button class="sec-action-btn" onclick="testVoice()">▶ Test voice</button>
+        </div>
+        <div class="sec-save">
+          <button class="save-btn" onclick="saveSettings()">Save Settings</button>
+        </div>
+      </div>
+
+      <!-- ── CAPABILITIES ── -->
+      <div class="sec-page" id="sec-capabilities">
+        <h2 class="sec-h">Capabilities</h2>
+        <p class="sec-desc" style="margin-bottom:16px">Turn Lumen's features on or off to customize your experience.</p>
+
+        <div class="sec-group">
+          <h3 class="sec-sub">Chat</h3>
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Streaming responses</div>
+              <div class="toggle-desc">Show responses as they generate, character by character</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="cap-streaming" checked/><span class="toggle-slider"></span></label>
+          </div>
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Memory</div>
+              <div class="toggle-desc">Lumen remembers key facts from your conversations for future context</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="cap-memory"/><span class="toggle-slider"></span></label>
+          </div>
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Obsidian integration</div>
+              <div class="toggle-desc">Show the Save to Obsidian and Vault search buttons in chat</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="cap-obsidian"/><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+
+        <div class="sec-group">
+          <h3 class="sec-sub">Voice</h3>
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Read responses aloud</div>
+              <div class="toggle-desc">AI responses will be read out loud using your system voice</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="cap-voice"/><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+
+        <div class="sec-group">
+          <h3 class="sec-sub">Notifications</h3>
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Desktop notifications</div>
+              <div class="toggle-desc">Show a notification when a long response finishes generating</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="cap-notifications"/><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+
+        <div class="sec-group">
+          <h3 class="sec-sub">Mobile Control (n8n)</h3>
+          <p class="sec-desc">Connect your phone to Lumen via n8n webhooks to send messages and trigger automations from anywhere.</p>
+          <div class="toggle-row" style="margin-bottom:12px">
+            <div>
+              <div class="toggle-label">Enable mobile webhooks</div>
+              <div class="toggle-desc">Activate the n8n webhook endpoint for phone triggers</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="cap-mobile"/><span class="toggle-slider"></span></label>
+          </div>
+          <div class="field-row">
+            <label>n8n Webhook URL</label>
+            <input type="text" id="s-mobile-webhook" placeholder="http://10.0.0.22:5678/webhook/lumen-chat"/>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+            <button class="sec-action-btn" onclick="testMobileWebhook()">Test Webhook</button>
+            <a class="sec-action-btn" href="http://10.0.0.22:5678" target="_blank" style="text-decoration:none">Open n8n →</a>
+          </div>
+          <div id="mobile-webhook-status"></div>
+        </div>
+
+        <div class="sec-save">
+          <button class="save-btn" onclick="saveSettings()">Save Capabilities</button>
+        </div>
+      </div>
+
+      <!-- ── SKILLS ── -->
+      <div class="sec-page" id="sec-skills">
+        <h2 class="sec-h">Skills</h2>
+        <p class="sec-desc" style="margin-bottom:16px">Skills customize how Lumen responds. The active skill becomes the AI's system prompt. You can create skills for different use cases — coding assistant, writing coach, home server admin, etc.</p>
+
+        <div class="sec-group">
+          <h3 class="sec-sub">Active Skill</h3>
+          <div id="active-skill-display">
+            <div class="skill-active-row">
+              <span id="active-skill-name">None (general assistant)</span>
+              <button class="sec-action-btn" onclick="clearActiveSkill()">Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec-group">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <h3 class="sec-sub" style="margin:0">Your Skills</h3>
+            <button class="sec-action-btn" onclick="openSkillEditor()">+ New Skill</button>
+          </div>
+          <div id="skills-list"></div>
+        </div>
+
+        <div class="sec-group">
+          <h3 class="sec-sub">Built-in Skills</h3>
+          <div id="builtin-skills-list"></div>
+        </div>
+      </div>
+
+      <!-- ── MEMORY ── -->
+      <div class="sec-page" id="sec-memory">
+        <h2 class="sec-h">Memory</h2>
+        <div class="sec-group">
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Enable Memory</div>
+              <div class="toggle-desc">Lumen remembers key facts from your conversations and uses them as context in future chats</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="s-memory-enabled"/><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+        <div class="sec-group">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <h3 class="sec-sub" style="margin:0">Stored Memories</h3>
+            <button class="sec-action-btn" onclick="generateMemoriesFromHistory()">↺ Generate from chat history</button>
+          </div>
+          <div id="memories-list"></div>
+          <button class="sec-danger-btn" style="margin-top:8px" onclick="clearAllMemories()">Clear all memories</button>
+        </div>
+        <div class="sec-group">
+          <h3 class="sec-sub">Import from AI Providers</h3>
+          <p class="sec-desc">Paste a memory summary exported from ChatGPT or another AI. Lumen will extract and store the facts.</p>
+          <textarea id="memory-import-text" rows="4" placeholder="Paste memory text from another AI provider here…" style="background:var(--bg-input);border:1px solid var(--border-strong);color:var(--text-primary);padding:9px 12px;border-radius:8px;font-size:13px;outline:none;resize:vertical;font-family:inherit;width:100%;box-sizing:border-box;"></textarea>
+          <button class="sec-action-btn" style="margin-top:8px" onclick="importMemoryFromText()">Import Memories</button>
+          <div id="memory-import-status"></div>
+        </div>
+      </div>
+
+      <!-- ── MOBILE ── -->
+      <div class="sec-page" id="sec-mobile">
+        <h2 class="sec-h">Mobile Control</h2>
+        <div class="sec-group">
+          <h3 class="sec-sub">Trigger Lumen from your phone</h3>
+          <p class="sec-desc">Use n8n webhooks to send messages to Lumen from anywhere. Set up n8n on your Unraid server, then configure the webhook URL below.</p>
+          <div class="field-row">
+            <label>n8n Webhook URL (for mobile triggers)</label>
+            <input type="text" id="s-mobile-webhook" placeholder="http://10.0.0.22:5678/webhook/lumen"/>
+          </div>
+          <button class="sec-action-btn" onclick="testMobileWebhook()">Test Webhook</button>
+          <div id="mobile-webhook-status"></div>
+        </div>
+        <div class="sec-group">
+          <h3 class="sec-sub">Setup Guide</h3>
+          <div class="stack-list">
+            <div class="stack-item"><span class="stack-label">Step 1</span><span>Deploy n8n on Unraid (Community Apps → n8n)</span></div>
+            <div class="stack-item"><span class="stack-label">Step 2</span><span>Create a Webhook trigger node in n8n</span></div>
+            <div class="stack-item"><span class="stack-label">Step 3</span><span>Add an HTTP Request node pointing to Lumen's Ollama</span></div>
+            <div class="stack-item"><span class="stack-label">Step 4</span><span>Use Telegram bot or n8n mobile app to trigger</span></div>
+          </div>
+          <a class="open-link-btn" href="http://10.0.0.22:5678" target="_blank" style="margin-top:8px;display:inline-block">Open n8n →</a>
+        </div>
+        <div class="sec-group">
+          <h3 class="sec-sub">Quick Actions</h3>
+          <p class="sec-desc">These buttons send preset prompts to Lumen via the webhook — useful for testing or triggering from Shortcuts/Tasker on mobile.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="sec-action-btn" onclick="mobileQuickAction('What is the status of my Unraid server?')">🖥 Server Status</button>
+            <button class="sec-action-btn" onclick="mobileQuickAction('Summarize what I worked on today based on recent chats')">📋 Daily Summary</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── CONNECTORS ── -->
+      <div class="sec-page" id="sec-connectors">
+        <h2 class="sec-h">Connectors</h2>
+        <p class="sec-desc">Connect Lumen to external services for automations, email, notifications, and more. Connections are stored locally and never leave your network.</p>
+        <div class="sec-group"><div id="settings-connectors-summary"></div></div>
+        <div id="connectors-grid">
+
+          <!-- GitHub -->
+          <div class="connector-card" data-connector="github">
+            <div class="connector-header">
+              <svg class="connector-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.15-1.1-1.46-1.1-1.46-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.64.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.6 9.6 0 0 1 12 6.84a9.6 9.6 0 0 1 2.5.34c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
+              <div><div class="connector-name">GitHub</div><div class="connector-desc">Repos, issues, pull requests, code</div></div>
+              <div class="connector-status-pill" data-for="github">Not connected</div>
+            </div>
+            <div class="connector-body hidden" id="github-config">
+              <label>Personal Access Token</label>
+              <div class="token-row"><input type="password" id="github-token" placeholder="ghp_xxxxxxxxxxxx"/><button class="test-btn" data-test="github">Test</button></div>
+              <p class="help-text">Generate at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a> — needs <code>repo</code>, <code>workflow</code> scopes</p>
+              <div class="connector-result" id="github-result"></div>
+            </div>
+            <button class="connector-toggle" data-for="github">Configure ↓</button>
+          </div>
+
+          <!-- Gmail -->
+          <div class="connector-card" data-connector="gmail">
+            <div class="connector-header">
+              <svg class="connector-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" fill="#EA4335"/></svg>
+              <div><div class="connector-name">Gmail</div><div class="connector-desc">Read emails, draft replies, trigger workflows</div></div>
+              <div class="connector-status-pill" data-for="gmail">Not connected</div>
+            </div>
+            <div class="connector-body hidden" id="gmail-config">
+              <p class="help-text">Gmail requires a Google OAuth app. Follow the guide in <strong>n8n-connectors-guide.md</strong> (Step 3) to set it up, then connect from n8n.</p>
+              <a class="open-link-btn" href="http://10.0.0.22:5678" target="_blank">Open n8n to connect Gmail →</a>
+            </div>
+            <button class="connector-toggle" data-for="gmail">Configure ↓</button>
+          </div>
+
+          <!-- Telegram -->
+          <div class="connector-card" data-connector="telegram">
+            <div class="connector-header">
+              <svg class="connector-icon" viewBox="0 0 24 24" fill="#2CA5E0"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8-1.7 8.02c-.13.58-.48.72-.97.45l-2.67-1.97-1.29 1.24c-.14.14-.27.27-.55.27l.2-2.79 5.1-4.61c.22-.2-.05-.3-.34-.11l-6.31 3.97-2.72-.85c-.59-.18-.6-.59.12-.87l10.63-4.1c.5-.18.93.12.5 1.35z"/></svg>
+              <div><div class="connector-name">Telegram</div><div class="connector-desc">Send/receive messages, phone notifications</div></div>
+              <div class="connector-status-pill" data-for="telegram">Not connected</div>
+            </div>
+            <div class="connector-body hidden" id="telegram-config">
+              <label>Bot Token</label>
+              <div class="token-row"><input type="password" id="telegram-token" placeholder="1234567890:ABCDef..."/><button class="test-btn" data-test="telegram">Test</button></div>
+              <label>Your Chat ID</label>
+              <input type="text" id="telegram-chatid" placeholder="123456789"/>
+              <p class="help-text">Message <strong>@BotFather</strong> on Telegram to create a bot (see n8n guide Step 5)</p>
+              <div class="connector-result" id="telegram-result"></div>
+            </div>
+            <button class="connector-toggle" data-for="telegram">Configure ↓</button>
+          </div>
+
+          <!-- Obsidian -->
+          <div class="connector-card" data-connector="obsidian">
+            <div class="connector-header">
+              <svg class="connector-icon" viewBox="0 0 24 24" fill="#7C3AED"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              <div><div class="connector-name">Obsidian</div><div class="connector-desc">Project notes, knowledge base, vault storage</div></div>
+              <div class="connector-status-pill" data-for="obsidian">Not connected</div>
+            </div>
+            <div class="connector-body hidden" id="obsidian-config">
+              <label>Local REST API URL</label>
+              <div class="token-row"><input type="text" id="obsidian-url" placeholder="http://127.0.0.1:27123"/><button class="test-btn" data-test="obsidian">Test</button></div>
+              <label>API Key (from plugin settings)</label>
+              <input type="password" id="obsidian-key" placeholder="your-api-key"/>
+              <label>Default Vault Folder</label>
+              <input type="text" id="obsidian-folder" placeholder="Lumen/"/>
+              <p class="help-text">Install the <strong>Local REST API</strong> community plugin in Obsidian. Once connected, Lumen can save conversations, Code Bot results, and project notes directly to your vault.</p>
+              <div class="connector-result" id="obsidian-result"></div>
+            </div>
+            <button class="connector-toggle" data-for="obsidian">Configure ↓</button>
+          </div>
+
+          <!-- n8n -->
+          <div class="connector-card" data-connector="n8n">
+            <div class="connector-header">
+              <svg class="connector-icon" viewBox="0 0 24 24" fill="#EA4B71"><circle cx="12" cy="12" r="10"/><path d="M7 12h10M12 7v10" stroke="white" stroke-width="2"/></svg>
+              <div><div class="connector-name">n8n Automation</div><div class="connector-desc">Trigger workflows, monitor automations</div></div>
+              <div class="connector-status-pill" data-for="n8n">Not connected</div>
+            </div>
+            <div class="connector-body hidden" id="n8n-config">
+              <label>n8n URL</label>
+              <div class="token-row"><input type="text" id="n8n-url" placeholder="http://10.0.0.22:5678"/><button class="test-btn" data-test="n8n">Test</button></div>
+              <label>API Key (Settings → API in n8n)</label>
+              <input type="password" id="n8n-key" placeholder="n8n_api_key..."/>
+              <div class="connector-result" id="n8n-result"></div>
+              <a class="open-link-btn" href="http://10.0.0.22:5678" target="_blank">Open n8n →</a>
+            </div>
+            <button class="connector-toggle" data-for="n8n">Configure ↓</button>
+          </div>
+
+          <!-- Flowise -->
+          <div class="connector-card" data-connector="flowise">
+            <div class="connector-header">
+              <svg class="connector-icon" viewBox="0 0 24 24" fill="#7C3AED"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+              <div><div class="connector-name">Flowise</div><div class="connector-desc">AI agent skills, chatflows, RAG pipelines</div></div>
+              <div class="connector-status-pill" data-for="flowise">Not connected</div>
+            </div>
+            <div class="connector-body hidden" id="flowise-config">
+              <label>Flowise URL</label>
+              <div class="token-row"><input type="text" id="flowise-url" placeholder="http://10.0.0.22:3002"/><button class="test-btn" data-test="flowise">Test</button></div>
+              <div class="connector-result" id="flowise-result"></div>
+              <a class="open-link-btn" href="http://10.0.0.22:3002" target="_blank">Open Flowise →</a>
+            </div>
+            <button class="connector-toggle" data-for="flowise">Configure ↓</button>
+          </div>
+
+          <!-- Skyvern -->
+          <div class="connector-card" data-connector="skyvern">
+            <div class="connector-header">
+              <svg class="connector-icon" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+              <div><div class="connector-name">Skyvern (AI Driver)</div><div class="connector-desc">Browser automation backend</div></div>
+              <div class="connector-status-pill" data-for="skyvern">Not connected</div>
+            </div>
+            <div class="connector-body hidden" id="skyvern-config">
+              <label>Skyvern API URL</label>
+              <div class="token-row"><input type="text" id="skyvern-url" placeholder="http://10.0.0.22:8000"/><button class="test-btn" data-test="skyvern">Test</button></div>
+              <label>API Key</label>
+              <input type="password" id="skyvern-key" placeholder="tower-skyvern-key"/>
+              <div class="connector-result" id="skyvern-result"></div>
+            </div>
+            <button class="connector-toggle" data-for="skyvern">Configure ↓</button>
+          </div>
+
+          <!-- OpenHands -->
+          <div class="connector-card" data-connector="openhands">
+            <div class="connector-header">
+              <svg class="connector-icon" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+              <div><div class="connector-name">OpenHands</div><div class="connector-desc">Code Bot AI agent backend</div></div>
+              <div class="connector-status-pill" data-for="openhands">Not connected</div>
+            </div>
+            <div class="connector-body hidden" id="openhands-config">
+              <label>OpenHands URL</label>
+              <div class="token-row"><input type="text" id="openhands-conn-url" placeholder="http://10.0.0.22:3001"/><button class="test-btn" data-test="openhands">Test</button></div>
+              <div class="connector-result" id="openhands-result"></div>
+              <a class="open-link-btn" href="http://10.0.0.22:3001" target="_blank">Open OpenHands →</a>
+            </div>
+            <button class="connector-toggle" data-for="openhands">Configure ↓</button>
+          </div>
+
+          <!-- Home Assistant -->
+          <div class="connector-card" data-connector="homeassistant">
+            <div class="connector-header">
+              <svg class="connector-icon" viewBox="0 0 24 24" fill="#41BDF5"><path d="M12 3L2 9v13h20V9L12 3zm0 2.3L20 10v10H4V10l8-4.7z"/><path d="M9 21v-6h6v6"/></svg>
+              <div><div class="connector-name">Home Assistant</div><div class="connector-desc">Control smart home, automate devices</div></div>
+              <div class="connector-status-pill" data-for="homeassistant">Not connected</div>
+            </div>
+            <div class="connector-body hidden" id="homeassistant-config">
+              <label>Home Assistant URL</label>
+              <div class="token-row"><input type="text" id="homeassistant-url" placeholder="http://10.0.0.22:8123"/><button class="test-btn" data-test="homeassistant">Test</button></div>
+              <label>Long-Lived Access Token</label>
+              <input type="password" id="homeassistant-token" placeholder="eyJ..."/>
+              <p class="help-text">Generate in Home Assistant → Profile → Long-Lived Access Tokens</p>
+              <div class="connector-result" id="homeassistant-result"></div>
+            </div>
+            <button class="connector-toggle" data-for="homeassistant">Configure ↓</button>
+          </div>
+
+          <!-- Netdata -->
+          <div class="connector-card" data-connector="netdata">
+            <div class="connector-header">
+              <svg class="connector-icon" viewBox="0 0 24 24" fill="#00AB44"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+              <div><div class="connector-name">Netdata</div><div class="connector-desc">Server metrics, performance monitoring</div></div>
+              <div class="connector-status-pill" data-for="netdata">Not connected</div>
+            </div>
+            <div class="connector-body hidden" id="netdata-config">
+              <label>Netdata URL</label>
+              <div class="token-row"><input type="text" id="netdata-url" placeholder="http://10.0.0.22:19999"/><button class="test-btn" data-test="netdata">Test</button></div>
+              <div class="connector-result" id="netdata-result"></div>
+              <a class="open-link-btn" href="http://10.0.0.22:19999" target="_blank">Open Netdata →</a>
+            </div>
+            <button class="connector-toggle" data-for="netdata">Configure ↓</button>
+          </div>
+
+        </div><!-- /connectors-grid -->
+      </div><!-- /sec-connectors -->
+
+      <!-- ── NOTIFICATIONS ── -->
+      <div class="sec-page" id="sec-notifications">
+        <h2 class="sec-h">Notifications</h2>
+        <div class="sec-group">
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Response completions</div>
+              <div class="toggle-desc">Get notified when Lumen has finished a long response or tool task</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="s-notify-response"/><span class="toggle-slider"></span></label>
+          </div>
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Code Bot task complete</div>
+              <div class="toggle-desc">Get notified when the Code Bot finishes a coding task</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="s-notify-codebot"/><span class="toggle-slider"></span></label>
+          </div>
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Obsidian save confirmation</div>
+              <div class="toggle-desc">Show a notification when a chat or note is saved to your vault</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="s-notify-obsidian"/><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+        <div class="sec-group">
+          <h3 class="sec-sub">System Notifications</h3>
+          <p class="sec-desc">Notifications use your OS notification system. Make sure Lumen is allowed to send notifications in your system settings.</p>
+          <button class="sec-action-btn" onclick="testNotification()">Send test notification</button>
+        </div>
+      </div>
+
+      <!-- ── DATA ── -->
+      <div class="sec-page" id="sec-data">
+        <h2 class="sec-h">Data & Privacy</h2>
+        <div class="sec-group">
+          <h3 class="sec-sub">Local Storage</h3>
+          <p class="sec-desc">Conversations, settings, and connector configurations are stored locally on this machine. Nothing is sent to any cloud — your data never leaves your network.</p>
+        </div>
+        <div class="sec-group">
+          <h3 class="sec-sub">Export Data</h3>
+          <p class="sec-desc">Download all your conversations, settings, and connector configurations as a JSON file.</p>
+          <button class="sec-action-btn" onclick="exportData()">⬇ Export All Data</button>
+        </div>
+        <div class="sec-group">
+          <h3 class="sec-sub">Import Data</h3>
+          <p class="sec-desc">Restore from a previously exported Lumen backup file.</p>
+          <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="importData(this)"/>
+          <button class="sec-action-btn" onclick="document.getElementById('import-file-input').click()">⬆ Import from Backup</button>
+          <div id="import-status"></div>
+        </div>
+        <div class="sec-group">
+          <h3 class="sec-sub">Clear Data</h3>
+          <p class="sec-desc">This will permanently delete all conversations. Connector settings and app preferences will not be affected.</p>
+          <button class="sec-danger-btn" id="btn-clear-history">Delete All Conversations</button>
+        </div>
+      </div>
+
+      <!-- ── ABOUT ── -->
+      <div class="sec-page" id="sec-about">
+        <h2 class="sec-h">About Lumen</h2>
+        <div class="sec-group about-block">
+          <div class="about-mascot-wrap">
+            <svg width="56" height="56" viewBox="0 0 40 40" fill="none">
+              <circle cx="20" cy="18" r="11" fill="var(--accent)" opacity="0.9"/>
+              <ellipse cx="17" cy="12" rx="3.5" ry="2.5" fill="white" opacity="0.18"/>
+              <path d="M14.5 14 Q16.5 12.5 18.5 14" stroke="white" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.9"/>
+              <path d="M21.5 14 Q23.5 12.5 25.5 14" stroke="white" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.9"/>
+              <circle cx="16.5" cy="17" r="3" fill="white"/>
+              <circle cx="23.5" cy="17" r="3" fill="white"/>
+              <circle cx="17" cy="17.5" r="1.7" fill="#1a0d00"/>
+              <circle cx="24" cy="17.5" r="1.7" fill="#1a0d00"/>
+              <circle cx="15.9" cy="15.9" r="0.8" fill="white"/>
+              <circle cx="22.9" cy="15.9" r="0.8" fill="white"/>
+              <circle cx="13" cy="20" r="2.2" fill="#f87171" opacity="0.28"/>
+              <circle cx="27" cy="20" r="2.2" fill="#f87171" opacity="0.28"/>
+              <path d="M15 22.5 Q20 27 25 22.5" stroke="white" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+              <rect x="14" y="28.5" width="12" height="2.5" rx="1.2" fill="var(--accent)" opacity="0.7"/>
+              <rect x="15" y="31" width="10" height="2" rx="1" fill="var(--accent)" opacity="0.5"/>
+            </svg>
+          </div>
+          <div class="about-info">
+            <div class="about-app-name">Lumen</div>
+            <div class="about-version">Version 1.0.0</div>
+            <div class="about-detail">Self-hosted AI for family</div>
+            <div class="about-detail">RTX 5070 · Ryzen 9 7900X · 128GB DDR5</div>
+            <div class="about-detail">Unraid 7.1.4 · Ollama · Electron 28</div>
+          </div>
+        </div>
+        <div class="sec-group">
+          <h3 class="sec-sub">Stack</h3>
+          <div class="stack-list">
+            <div class="stack-item"><span class="stack-label">AI Engine</span><span>Ollama (local)</span></div>
+            <div class="stack-item"><span class="stack-label">Chat Models</span><span>Qwen 2.5, Llama 3</span></div>
+            <div class="stack-item"><span class="stack-label">Code Agent</span><span>OpenHands</span></div>
+            <div class="stack-item"><span class="stack-label">Browser AI</span><span>Skyvern</span></div>
+            <div class="stack-item"><span class="stack-label">Automation</span><span>n8n + Flowise</span></div>
+            <div class="stack-item"><span class="stack-label">Knowledge</span><span>Obsidian Local REST API</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /settings-content -->
+  </div><!-- /settings-layout -->
+
+</div><!-- /settings-panel -->
+
+<!-- ═══ SKILL EDITOR MODAL ═══ -->
+<div id="skill-overlay" class="hidden" onclick="closeSkillEditor()"></div>
+<div id="skill-modal" class="hidden">
+  <div class="skill-modal-header">
+    <h3 id="skill-modal-title">New Skill</h3>
+    <button onclick="closeSkillEditor()" class="vault-close">✕</button>
+  </div>
+  <div class="skill-modal-body">
+    <label>Skill Name</label>
+    <input type="text" id="skill-name-input" placeholder="e.g. Home Server Admin" />
+    <label style="margin-top:12px">System Prompt</label>
+    <textarea id="skill-prompt-input" rows="8" placeholder="You are an expert home server and Unraid administrator. The user runs an Unraid server with Docker containers managed via Portainer..."></textarea>
+  </div>
+  <div class="skill-modal-footer">
+    <button onclick="closeSkillEditor()" class="btn-secondary">Cancel</button>
+    <button onclick="saveSkill()" class="btn-primary">Save Skill</button>
+  </div>
+</div>
+
+<!-- ═══ VAULT SEARCH MODAL ═══ -->
+<div id="vault-overlay" class="hidden" onclick="closeVaultModal()"></div>
+<div id="vault-modal" class="hidden">
+  <div id="vault-modal-header">
+    <div class="vault-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      Search Obsidian Vault
+    </div>
+    <button class="vault-close" onclick="closeVaultModal()">✕</button>
+  </div>
+  <div id="vault-search-row">
+    <input id="vault-search-input" placeholder="Search notes by keyword…" autocomplete="off"/>
+    <button id="btn-vault-search" onclick="searchVault()">Search</button>
+  </div>
+  <div id="vault-body">
+    <div id="vault-results">
+      <div class="vault-hint">Enter a keyword above, or browse all notes</div>
+    </div>
+    <div id="vault-preview-pane">
+      <div id="vault-preview-filename"></div>
+      <pre id="vault-preview-content">Select a note to preview its contents.</pre>
+    </div>
+  </div>
+  <div id="vault-modal-footer">
+    <span id="vault-status"></span>
+    <div class="vault-footer-btns">
+      <button onclick="closeVaultModal()" class="btn-secondary">Cancel</button>
+      <button id="btn-attach-context" onclick="attachVaultContext()" disabled class="btn-primary">Attach as Context</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
