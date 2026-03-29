@@ -268,7 +268,7 @@ async function initWebviews() {
       document.getElementById('driver-retry')?.addEventListener('click', retrySkyvern);
     }
   }
-  document.getElementById('driver-retry').addEventListener('click', retrySkyvern);
+  document.getElementById('driver-retry')?.addEventListener('click', retrySkyvern);
 
   // Copy overlay cmd
   document.querySelectorAll('.copy-overlay-btn').forEach(btn => {
