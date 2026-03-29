@@ -3,11 +3,13 @@
    ═══════════════════════════════════════════════ */
 
 const DEFAULT_SETTINGS = {
-  ollamaUrl:    'http://10.0.0.22:11434',
-  skyvernUrl:   'http://10.0.0.22:8081',
-  openhandsUrl: 'http://10.0.0.22:3001',
-  model:        'qwen2.5:14b',
-  codeModel:    'qwen2.5-coder:14b',
+  ollamaUrl:      'http://10.0.0.22:11434',
+  skyvernUrl:     'http://10.0.0.22:8081',
+  openhandsUrl:   'http://10.0.0.22:3001',
+  openrouterKey:  '',
+  anthropicKey:   '',
+  model:          'qwen2.5:14b',
+  codeModel:      'qwen2.5-coder:14b',
   theme:        'tower-dark',
   fontSize:     14,
   streaming:    true,
@@ -513,7 +515,122 @@ async function sendChat() {
   }
 }
 
+// ── CLOUD MODEL ROUTING ───────────────────────
+// Model strings use a provider prefix so the same field handles everything:
+//   "qwen2.5:14b"                → Ollama (no prefix)
+//   "or:deepseek/deepseek-chat"  → OpenRouter
+//   "ant:claude-haiku-4-5-20251001" → Anthropic direct
+function parseModel(modelStr) {
+  if (!modelStr) return { provider: 'ollama', model: 'qwen2.5:14b' };
+  if (modelStr.startsWith('or:'))  return { provider: 'openrouter', model: modelStr.slice(3) };
+  if (modelStr.startsWith('ant:')) return { provider: 'anthropic',  model: modelStr.slice(4) };
+  return { provider: 'ollama', model: modelStr };
+}
+
+// Cloud streaming — handles both OpenRouter (OpenAI-compat SSE) and Anthropic SSE
+async function streamChatCloud(msgs, model, conv, provider) {
+  appendStreaming();
+  let full = '', buf = '', eventType = '';
+  const controller = new AbortController();
+  state.streamController = controller;
+
+  const timeoutId = setTimeout(() => { state.stopRequested = false; controller.abort(); }, 60000);
+  const hintTimer  = setTimeout(() => {
+    const b = document.getElementById('streaming-body');
+    const name = provider === 'anthropic' ? 'Anthropic' : 'OpenRouter';
+    if (b) b.innerHTML = `<div class="thinking"><div class="thinking-dot"></div><div class="thinking-dot"></div><div class="thinking-dot"></div></div><div style="font-size:12px;color:var(--text-muted);margin-top:8px;">Waiting for ${name} response…</div>`;
+  }, 5000);
+
+  try {
+    let res;
+    if (provider === 'openrouter') {
+      if (!state.settings.openrouterKey) throw new Error('OpenRouter API key not set.\n\nGo to **Settings → Connectors** and paste your key from openrouter.ai/keys');
+      res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${state.settings.openrouterKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://lumen.local',
+          'X-Title': 'Lumen',
+        },
+        body: JSON.stringify({ model, messages: msgs, stream: true }),
+        signal: controller.signal,
+      });
+    } else {
+      // Anthropic
+      if (!state.settings.anthropicKey) throw new Error('Anthropic API key not set.\n\nGo to **Settings → Connectors** and paste your key from console.anthropic.com');
+      res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': state.settings.anthropicKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model, messages: msgs, max_tokens: 8192, stream: true }),
+        signal: controller.signal,
+      });
+    }
+
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      let hint = '';
+      if (res.status === 401) hint = '\n\nCheck your API key in Settings → Connectors.';
+      if (res.status === 429) hint = '\n\nRate limit hit — wait a moment and try again.';
+      if (res.status === 402) hint = '\n\nInsufficient credits. Top up at openrouter.ai/credits';
+      throw new Error(`HTTP ${res.status}${errBody ? ': ' + errBody.slice(0, 200) : ''}${hint}`);
+    }
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) { eventType = ''; continue; }
+        if (provider === 'openrouter') {
+          // OpenAI-compatible SSE: "data: {...}" or "data: [DONE]"
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') continue;
+          try {
+            const d = JSON.parse(data);
+            const chunk = d.choices?.[0]?.delta?.content;
+            if (chunk) { full += chunk; updateStreaming(full); }
+          } catch {}
+        } else {
+          // Anthropic SSE: "event: ..." line then "data: ..." line
+          if (line.startsWith('event: ')) { eventType = line.slice(7).trim(); continue; }
+          if (line.startsWith('data: ') && eventType === 'content_block_delta') {
+            try {
+              const d = JSON.parse(line.slice(6));
+              const chunk = d.delta?.text;
+              if (chunk) { full += chunk; updateStreaming(full); }
+            } catch {}
+          }
+        }
+      }
+    }
+  } finally {
+    clearTimeout(timeoutId); clearTimeout(hintTimer);
+    state.streamController = null;
+  }
+
+  if (!full) {
+    const name = provider === 'anthropic' ? 'Anthropic' : 'OpenRouter';
+    throw new Error(`${name} returned an empty response. Your API key may be invalid — check Settings → Connectors.`);
+  }
+  finalizeStreaming(full);
+  conv.messages.push({ role: 'assistant', content: full, timestamp: Date.now() });
+  conv.updatedAt = Date.now();
+  save();
+}
+
 async function streamChat(msgs, model, conv) {
+  const parsed = parseModel(model);
+  if (parsed.provider !== 'ollama') return streamChatCloud(msgs, parsed.model, conv, parsed.provider);
+
   appendStreaming();
   let full = '', buf = '';
   const controller = new AbortController();
@@ -534,10 +651,11 @@ async function streamChat(msgs, model, conv) {
     if (b) b.innerHTML = `<div class="thinking"><div class="thinking-dot"></div><div class="thinking-dot"></div><div class="thinking-dot"></div></div><div style="font-size:12px;color:var(--text-muted);margin-top:8px;">Still loading… If this always hangs, Ollama may be running <strong>without GPU</strong>.<br>In Unraid → Docker → Ollama → Edit, add <code style="background:var(--bg-hover);padding:1px 5px;border-radius:3px">--gpus=all</code> to Extra Parameters.</div>`;
   }, 90000);
 
+  const ollamaModel = parsed.model; // plain model name without any prefix
   try {
     const res = await fetch(`${state.settings.ollamaUrl}/api/chat`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({model, messages:msgs, stream:true}),
+      body: JSON.stringify({model: ollamaModel, messages:msgs, stream:true}),
       signal: controller.signal,
     });
     if (!res.ok) {
@@ -564,7 +682,7 @@ async function streamChat(msgs, model, conv) {
     clearTimeout(timeoutId); clearTimeout(hintTimer); clearTimeout(gpuHintTimer);
     state.streamController = null;
   }
-  if (!full) throw new Error(`Model "${model}" returned an empty response. Is it loaded in Ollama?`);
+  if (!full) throw new Error(`Model "${ollamaModel}" returned an empty response. Is it loaded in Ollama?`);
   finalizeStreaming(full);
   conv.messages.push({role:'assistant',content:full,timestamp:Date.now()});
   conv.updatedAt = Date.now();
@@ -923,10 +1041,12 @@ function switchSettingsSection(sec) {
   document.querySelectorAll('.sec-page').forEach(p => p.classList.toggle('active', p.id === `sec-${sec}`));
 }
 function populateSettingsForm() {
-  document.getElementById('s-ollama').value    = state.settings.ollamaUrl;
-  document.getElementById('s-skyvern').value   = state.settings.skyvernUrl;
-  document.getElementById('s-openhands').value = state.settings.openhandsUrl;
-  document.getElementById('s-model').value     = state.settings.model;
+  document.getElementById('s-ollama').value         = state.settings.ollamaUrl;
+  document.getElementById('s-skyvern').value        = state.settings.skyvernUrl;
+  document.getElementById('s-openhands').value      = state.settings.openhandsUrl;
+  document.getElementById('s-openrouter-key').value = state.settings.openrouterKey || '';
+  document.getElementById('s-anthropic-key').value  = state.settings.anthropicKey  || '';
+  document.getElementById('s-model').value          = state.settings.model;
   document.getElementById('s-fontsize').value  = state.settings.fontSize;
   document.getElementById('s-fontsize-label').textContent = state.settings.fontSize+'px';
   document.querySelectorAll('.theme-opt').forEach(o => o.classList.toggle('active', o.dataset.theme === state.settings.theme));
@@ -973,10 +1093,12 @@ function populateSettingsForm() {
   const mw = document.getElementById('s-mobile-webhook'); if(mw) mw.value = state.settings.mobileWebhook || '';
 }
 async function saveSettings() {
-  state.settings.ollamaUrl    = document.getElementById('s-ollama').value.trim()    || DEFAULT_SETTINGS.ollamaUrl;
-  state.settings.skyvernUrl   = document.getElementById('s-skyvern').value.trim()   || DEFAULT_SETTINGS.skyvernUrl;
-  state.settings.openhandsUrl = document.getElementById('s-openhands').value.trim() || DEFAULT_SETTINGS.openhandsUrl;
-  state.settings.model        = document.getElementById('s-model').value;
+  state.settings.ollamaUrl      = document.getElementById('s-ollama').value.trim()    || DEFAULT_SETTINGS.ollamaUrl;
+  state.settings.skyvernUrl     = document.getElementById('s-skyvern').value.trim()   || DEFAULT_SETTINGS.skyvernUrl;
+  state.settings.openhandsUrl   = document.getElementById('s-openhands').value.trim() || DEFAULT_SETTINGS.openhandsUrl;
+  state.settings.openrouterKey  = document.getElementById('s-openrouter-key').value.trim();
+  state.settings.anthropicKey   = document.getElementById('s-anthropic-key').value.trim();
+  state.settings.model          = document.getElementById('s-model').value;
   state.settings.fontSize     = parseInt(document.getElementById('s-fontsize').value, 10);
   applyFontSize(state.settings.fontSize);
   document.getElementById('model-select').value = state.settings.model;

@@ -216,10 +216,24 @@
             <div id="model-selector-wrap">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
               <select id="model-select">
-                <option value="qwen2.5:14b">Qwen 2.5 · 14B</option>
-                <option value="qwen2.5:32b">Qwen 2.5 · 32B</option>
-                <option value="qwen2.5-coder:14b">Qwen Coder · 14B</option>
-                <option value="llama3.2:3b">Llama 3.2 · 3B (fast)</option>
+                <optgroup label="⚡ Local (Ollama)">
+                  <option value="qwen2.5:14b">Qwen 2.5 · 14B</option>
+                  <option value="qwen2.5:32b">Qwen 2.5 · 32B</option>
+                  <option value="qwen2.5-coder:14b">Qwen Coder · 14B</option>
+                  <option value="llama3.2:3b">Llama 3.2 · 3B (fast)</option>
+                </optgroup>
+                <optgroup label="☁ OpenRouter">
+                  <option value="or:deepseek/deepseek-chat">DeepSeek Chat · $0.28/1M</option>
+                  <option value="or:google/gemini-2.0-flash-lite">Gemini 2.0 Flash Lite · $0.075/1M</option>
+                  <option value="or:google/gemini-2.5-flash-preview">Gemini 2.5 Flash · $0.15/1M</option>
+                  <option value="or:mistralai/mistral-medium-3">Mistral Medium · $0.40/1M</option>
+                  <option value="or:x-ai/grok-3-mini">Grok 3 Mini · $0.30/1M</option>
+                </optgroup>
+                <optgroup label="🧠 Anthropic (direct)">
+                  <option value="ant:claude-haiku-4-5-20251001">Claude Haiku 4.5 · $0.25/1M</option>
+                  <option value="ant:claude-sonnet-4-6">Claude Sonnet 4.6 · $3/1M</option>
+                  <option value="ant:claude-opus-4-6">Claude Opus 4.6 · $5/1M</option>
+                </optgroup>
               </select>
             </div>
             <!-- Skill picker button -->
@@ -551,16 +565,43 @@
         </div>
 
         <div class="sec-group">
+          <h3 class="sec-sub">Cloud AI Keys</h3>
+          <p class="sec-desc">Add API keys to unlock cloud models in the chat model picker. Keys are stored locally on your machine only.</p>
+          <div class="field-row">
+            <label>OpenRouter API Key — <a href="https://openrouter.ai/keys" style="color:var(--accent);text-decoration:none" onclick="require('electron').shell.openExternal('https://openrouter.ai/keys');return false">↗ Get key</a> · pay-as-you-go, ~$5 lasts months</label>
+            <input type="password" id="s-openrouter-key" placeholder="sk-or-v1-…" autocomplete="off" spellcheck="false"/>
+          </div>
+          <div class="field-row">
+            <label>Anthropic API Key — <a href="https://console.anthropic.com" style="color:var(--accent);text-decoration:none" onclick="require('electron').shell.openExternal('https://console.anthropic.com');return false">↗ Get key</a> · Haiku is $0.25/1M tokens</label>
+            <input type="password" id="s-anthropic-key" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"/>
+          </div>
+        </div>
+
+        <div class="sec-group">
           <h3 class="sec-sub">Default Chat Model</h3>
           <div class="field-row">
             <select id="s-model">
-              <option value="qwen2.5:14b">Qwen 2.5 — 14B (balanced)</option>
-              <option value="qwen2.5:32b">Qwen 2.5 — 32B (best quality)</option>
-              <option value="qwen2.5-coder:14b">Qwen Coder — 14B (code)</option>
-              <option value="llama3.2:3b">Llama 3.2 — 3B (fastest)</option>
+              <optgroup label="⚡ Local (Ollama)">
+                <option value="qwen2.5:14b">Qwen 2.5 — 14B (balanced)</option>
+                <option value="qwen2.5:32b">Qwen 2.5 — 32B (best quality)</option>
+                <option value="qwen2.5-coder:14b">Qwen Coder — 14B (code)</option>
+                <option value="llama3.2:3b">Llama 3.2 — 3B (fastest)</option>
+              </optgroup>
+              <optgroup label="☁ OpenRouter">
+                <option value="or:deepseek/deepseek-chat">DeepSeek Chat · $0.28/1M in</option>
+                <option value="or:google/gemini-2.0-flash-lite">Gemini 2.0 Flash Lite · $0.075/1M</option>
+                <option value="or:google/gemini-2.5-flash-preview">Gemini 2.5 Flash · $0.15/1M</option>
+                <option value="or:mistralai/mistral-medium-3">Mistral Medium · $0.40/1M</option>
+                <option value="or:x-ai/grok-3-mini">Grok 3 Mini · $0.30/1M</option>
+              </optgroup>
+              <optgroup label="🧠 Anthropic (direct)">
+                <option value="ant:claude-haiku-4-5-20251001">Claude Haiku 4.5 · $0.25/1M</option>
+                <option value="ant:claude-sonnet-4-6">Claude Sonnet 4.6 · $3/1M</option>
+                <option value="ant:claude-opus-4-6">Claude Opus 4.6 · $5/1M</option>
+              </optgroup>
             </select>
           </div>
-          <button id="btn-fetch-models" class="sec-action-btn">↺ Refresh model list from Ollama</button>
+          <button id="btn-fetch-models" class="sec-action-btn">↺ Refresh Ollama model list</button>
           <div id="fetch-models-status"></div>
         </div>
 
