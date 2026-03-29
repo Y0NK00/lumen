@@ -92,7 +92,7 @@ async function init() {
 
   // Re-size webviews whenever the window is resized
   window.addEventListener('resize', () => {
-    if (state.mode === 'driver') forceResizeWebview('webview-driver', 'driver-webview-wrap');
+    if (state.mode === 'driver') updateDriverBounds();
     if (state.mode === 'chrome') forceResizeWebview('webview-chrome', 'chrome-webview-wrap');
   });
 }
@@ -147,14 +147,18 @@ function forceResizeWebview(webviewId, containerId) {
 }
 
 function switchMode(mode) {
-  if (state.mode === mode) return;
+  const prev = state.mode;
+  if (prev === mode) return;
   state.mode = mode;
 
   document.querySelectorAll('.top-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === `panel-${mode}`));
 
-  // Force webview to fill its container (Electron CSS flex doesn't always apply)
-  if (mode === 'driver') forceResizeWebview('webview-driver', 'driver-webview-wrap');
+  // BrowserView: hide when leaving driver, show/init when entering driver
+  if (prev === 'driver') window.tower.driver.hide();
+  if (mode === 'driver') {
+    requestAnimationFrame(() => requestAnimationFrame(() => initDriverView()));
+  }
   if (mode === 'chrome') forceResizeWebview('webview-chrome', 'chrome-webview-wrap');
 
   // Sidebar conversations only relevant in chat mode
@@ -191,16 +195,38 @@ function getDriverOverlayHTML() {
   </div>`;
 }
 
-async function initWebviews() {
-  if (state.webviewsLoaded) return;
-  state.webviewsLoaded = true;
+// driverState: 'idle' | 'loading' | 'ready' | 'error'
+let driverState = 'idle';
 
-  const wvDriver = document.getElementById('webview-driver');
-  const wvCode   = document.getElementById('webview-code');
+function updateDriverBounds() {
+  if (driverState !== 'ready') return;
+  const wrap = document.getElementById('driver-webview-wrap');
+  if (!wrap) return;
+  const r = wrap.getBoundingClientRect();
+  if (r.width > 10 && r.height > 10) {
+    window.tower.driver.setBounds({ x: r.left, y: r.top, width: r.width, height: r.height });
+  }
+}
+
+async function initDriverView() {
   const driverOverlay = document.getElementById('driver-overlay');
-  const codeOverlay   = document.getElementById('code-overlay');
 
-  // Ping Skyvern API before loading the webview to avoid nginx welcome page
+  if (driverState === 'ready') {
+    // Already loaded — just reposition the BrowserView
+    const wrap = document.getElementById('driver-webview-wrap');
+    const r = wrap.getBoundingClientRect();
+    window.tower.driver.show({ x: r.left, y: r.top, width: r.width, height: r.height });
+    driverOverlay.classList.add('hidden');
+    return;
+  }
+
+  if (driverState === 'loading') return; // onLoaded/onFailed will handle it
+
+  // 'idle' or 'error' — (re)initialize
+  driverState = 'loading';
+  driverOverlay.innerHTML = `<div class="spinner"></div><p>Connecting to Skyvern…</p>`;
+  driverOverlay.classList.remove('hidden');
+
   const skyvernApiUrl = state.settings.skyvernUrl.replace(':8081', ':8000');
   let skyvernUp = false;
   try {
@@ -211,51 +237,64 @@ async function initWebviews() {
     skyvernUp = ping.ok || ping.status === 200;
   } catch {}
 
-  if (skyvernUp) {
-    // Load driver webview — Skyvern is running
-    driverOverlay.innerHTML = `<div class="spinner"></div><p>Connecting to Skyvern…</p>`;
-    wvDriver.src = state.settings.skyvernUrl;
-    wvDriver.addEventListener('did-finish-load', () => {
-      driverOverlay.classList.add('hidden');
-      // Only force-resize if the driver panel is currently active;
-      // switchMode() will handle it when the user navigates there.
-      if (state.mode === 'driver') {
-        forceResizeWebview('webview-driver', 'driver-webview-wrap');
-      }
+  if (!skyvernUp) {
+    driverState = 'error';
+    driverOverlay.innerHTML = getDriverOverlayHTML();
+    document.getElementById('driver-retry')?.addEventListener('click', () => {
+      driverState = 'idle';
+      initDriverView();
     });
-    wvDriver.addEventListener('did-fail-load',   () => { driverOverlay.classList.remove('hidden'); });
-  } else {
-    // Leave overlay visible — Skyvern not reachable
+    return;
   }
 
-  // Load code bot
-  wvCode.src = state.settings.openhandsUrl;
-  wvCode.addEventListener('did-finish-load', () => { codeOverlay.classList.add('hidden'); });
-  wvCode.addEventListener('did-fail-load',   () => {
-    codeOverlay.innerHTML = `<p style="color:var(--text-muted);font-size:13px;">Could not connect to OpenHands at<br><code style="background:var(--bg-hover);padding:2px 6px;border-radius:4px;">${state.settings.openhandsUrl}</code><br><br>Check Settings to verify the URL.</p>`;
+  // Skyvern is up — create the BrowserView and load the URL
+  await window.tower.driver.init(state.settings.skyvernUrl);
+  // onLoaded / onFailed callbacks (registered once in initWebviews) will take over
+}
+
+async function initWebviews() {
+  if (state.webviewsLoaded) return;
+  state.webviewsLoaded = true;
+
+  const wvCode       = document.getElementById('webview-code');
+  const codeOverlay  = document.getElementById('code-overlay');
+  const driverOverlay = document.getElementById('driver-overlay');
+
+  // Wire up BrowserView events (register once)
+  window.tower.driver.onLoaded(() => {
+    driverState = 'ready';
+    driverOverlay.classList.add('hidden');
+    if (state.mode === 'driver') {
+      const wrap = document.getElementById('driver-webview-wrap');
+      const r = wrap.getBoundingClientRect();
+      window.tower.driver.show({ x: r.left, y: r.top, width: r.width, height: r.height });
+    }
+  });
+  window.tower.driver.onFailed(() => {
+    driverState = 'error';
+    driverOverlay.innerHTML = getDriverOverlayHTML();
+    driverOverlay.classList.remove('hidden');
+    document.getElementById('driver-retry')?.addEventListener('click', () => {
+      driverState = 'idle';
+      if (state.mode === 'driver') initDriverView();
+    });
   });
 
-  // Retry button — ping first, then load
-  async function retrySkyvern() {
-    driverOverlay.innerHTML = `<div class="spinner"></div><p>Checking Skyvern…</p>`;
-    const apiUrl = state.settings.skyvernUrl.replace(':8081', ':8000');
-    let up = false;
-    try {
-      const ctrl = new AbortController();
-      setTimeout(() => ctrl.abort(), 4000);
-      const r = await fetch(`${apiUrl}/api/v1/heartbeat`, { signal: ctrl.signal });
-      up = r.ok || r.status === 200;
-    } catch {}
-    if (up) {
-      wvDriver.src = state.settings.skyvernUrl + '?t=' + Date.now();
+  // Toolbar buttons
+  document.getElementById('driver-reload').addEventListener('click', () => {
+    if (driverState === 'ready') {
+      driverOverlay.innerHTML = `<div class="spinner"></div><p>Reloading…</p>`;
+      driverOverlay.classList.remove('hidden');
+      driverState = 'loading';
+      window.tower.driver.reload();
     } else {
-      driverOverlay.innerHTML = getDriverOverlayHTML();
-      document.getElementById('driver-retry')?.addEventListener('click', retrySkyvern);
+      driverState = 'idle';
+      initDriverView();
     }
-  }
-  document.getElementById('driver-retry').addEventListener('click', retrySkyvern);
+  });
+  document.getElementById('driver-popout').addEventListener('click', () => window.open(state.settings.skyvernUrl));
 
-  // Copy overlay cmd
+  // Copy overlay command buttons
   document.querySelectorAll('.copy-overlay-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       navigator.clipboard.writeText(btn.dataset.copy);
@@ -264,12 +303,12 @@ async function initWebviews() {
     });
   });
 
-  document.getElementById('driver-reload').addEventListener('click', () => {
-    driverOverlay.classList.remove('hidden');
-    driverOverlay.innerHTML = `<div class="spinner"></div><p>Reloading…</p>`;
-    wvDriver.reload();
+  // Load code bot (still uses <webview>)
+  wvCode.src = state.settings.openhandsUrl;
+  wvCode.addEventListener('did-finish-load', () => { codeOverlay.classList.add('hidden'); });
+  wvCode.addEventListener('did-fail-load', () => {
+    codeOverlay.innerHTML = `<p style="color:var(--text-muted);font-size:13px;">Could not connect to OpenHands at<br><code style="background:var(--bg-hover);padding:2px 6px;border-radius:4px;">${state.settings.openhandsUrl}</code><br><br>Check Settings to verify the URL.</p>`;
   });
-  document.getElementById('driver-popout').addEventListener('click', () => window.open(state.settings.skyvernUrl));
 }
 
 // ── CONVERSATIONS ────────────────────────────

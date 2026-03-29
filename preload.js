@@ -26,4 +26,16 @@ contextBridge.exposeInMainWorld('tower', {
   connectGoogle:     ()          => ipcRenderer.invoke('connect-google'),
   onGoogleConnected: (cb)        => ipcRenderer.on('google-connected', cb),
   onGoogleError:     (cb)        => ipcRenderer.on('google-error', cb),
+
+  // AI Driver BrowserView
+  driver: {
+    init:      (url)    => ipcRenderer.invoke('driver:init', { url }),
+    show:      (bounds) => ipcRenderer.invoke('driver:show', bounds),
+    hide:      ()       => ipcRenderer.invoke('driver:hide'),
+    setBounds: (bounds) => ipcRenderer.invoke('driver:setBounds', bounds),
+    reload:    ()       => ipcRenderer.invoke('driver:reload'),
+    navigate:  (url)    => ipcRenderer.invoke('driver:navigate', url),
+    onLoaded:  (cb)     => ipcRenderer.on('driver:loaded', cb),
+    onFailed:  (cb)     => ipcRenderer.on('driver:failed', cb),
+  },
 });

@@ -1,10 +1,12 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, BrowserView, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { exec, spawn } = require('child_process');
 const { google } = require('googleapis');
 
 let mainWindow;
+let driverView = null;
+let driverViewAttached = false;
 const userDataPath = app.getPath('userData');
 const conversationsFile = path.join(userDataPath, 'conversations.json');
 const settingsFile      = path.join(userDataPath, 'settings.json');
@@ -168,3 +170,51 @@ ipcMain.handle('fs:listDir', (_, dirPath) => {
     return { items: items.map(i => ({ name: i.name, isDir: i.isDirectory() })), error: null };
   } catch (e) { return { items: [], error: e.message }; }
 });
+
+// ── AI Driver BrowserView ──
+// BrowserView is main-process managed with explicit pixel bounds, avoiding the
+// <webview> guest renderer viewport bug where 0px at first-load permanently
+// freezes the viewport at ~150px regardless of later CSS changes.
+
+function driverBounds({ x, y, width, height }) {
+  return { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) };
+}
+
+ipcMain.handle('driver:init', (_, { url }) => {
+  if (!driverView) {
+    driverView = new BrowserView({
+      webPreferences: { nodeIntegration: false, contextIsolation: true, webSecurity: false },
+    });
+    driverView.webContents.on('did-finish-load', () => {
+      mainWindow?.webContents.send('driver:loaded');
+    });
+    driverView.webContents.on('did-fail-load', (_, errCode) => {
+      if (errCode !== -3) mainWindow?.webContents.send('driver:failed');
+    });
+  }
+  driverView.webContents.loadURL(url);
+  return true;
+});
+
+ipcMain.handle('driver:show', (_, bounds) => {
+  if (!driverView) return;
+  if (!driverViewAttached) {
+    mainWindow.addBrowserView(driverView);
+    driverViewAttached = true;
+  }
+  driverView.setBounds(driverBounds(bounds));
+});
+
+ipcMain.handle('driver:hide', () => {
+  if (driverView && driverViewAttached) {
+    mainWindow.removeBrowserView(driverView);
+    driverViewAttached = false;
+  }
+});
+
+ipcMain.handle('driver:setBounds', (_, bounds) => {
+  if (driverView && driverViewAttached) driverView.setBounds(driverBounds(bounds));
+});
+
+ipcMain.handle('driver:reload', () => { driverView?.webContents.reload(); });
+ipcMain.handle('driver:navigate', (_, url) => { driverView?.webContents.loadURL(url); });
