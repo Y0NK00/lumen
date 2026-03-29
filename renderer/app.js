@@ -124,9 +124,12 @@ function forceResizeWebview(webviewId, containerId) {
     const container = document.getElementById(containerId);
     const wv        = document.getElementById(webviewId);
     if (!container || !wv) return;
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    if (w > 50 && h > 50) {
+    // getBoundingClientRect() returns accurate subpixel values even mid-layout,
+    // unlike clientWidth/clientHeight which can lag a paint cycle behind.
+    const rect = container.getBoundingClientRect();
+    const w = Math.round(rect.width);
+    const h = Math.round(rect.height);
+    if (w > 100 && h > 100) {
       wv.style.width  = w + 'px';
       wv.style.height = h + 'px';
     }
