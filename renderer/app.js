@@ -143,6 +143,17 @@ function forceResizeWebview(webviewId, containerId) {
       ro.observe(container);
       _webviewObservers[containerId] = ro;
     }
+
+    // MutationObserver on the parent .panel — fires when .active is added/removed
+    // (display:none → display:flex). ResizeObserver alone misses this transition
+    // because Chromium doesn't always fire for elements in a hidden subtree.
+    const panel = container ? container.closest('.panel') : null;
+    if (panel) {
+      const mo = new MutationObserver(() => {
+        if (panel.classList.contains('active')) applySize();
+      });
+      mo.observe(panel, { attributes: true, attributeFilter: ['class'] });
+    }
   }
 }
 
@@ -217,11 +228,12 @@ async function initWebviews() {
     wvDriver.src = state.settings.skyvernUrl;
     wvDriver.addEventListener('did-finish-load', () => {
       driverOverlay.classList.add('hidden');
-      // Only force-resize if the driver panel is currently active;
-      // switchMode() will handle it when the user navigates there.
-      if (state.mode === 'driver') {
-        forceResizeWebview('webview-driver', 'driver-webview-wrap');
-      }
+      forceResizeWebview('webview-driver', 'driver-webview-wrap');
+    });
+    // dom-ready fires after the webview's internal renderer initialises —
+    // this can reset sizing, so re-apply explicit dimensions here too.
+    wvDriver.addEventListener('dom-ready', () => {
+      forceResizeWebview('webview-driver', 'driver-webview-wrap');
     });
     wvDriver.addEventListener('did-fail-load',   () => { driverOverlay.classList.remove('hidden'); });
   } else {
