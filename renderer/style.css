@@ -267,7 +267,7 @@ a{color:var(--accent);}
 
 /* ── WEBVIEW CONTAINER ── */
 .webview-container{flex:1 1 0;min-height:0;position:relative;overflow:hidden;}
-webview{position:absolute;top:0;left:0;width:100%;height:100%;display:block;}
+webview{display:block;}/* JS stamps explicit px via setAttribute — CSS sizing avoided to prevent Electron conflict */
 .embed-overlay{
   position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:12px;

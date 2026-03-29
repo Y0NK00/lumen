@@ -130,8 +130,9 @@ function forceResizeWebview(webviewId, containerId) {
     const w = Math.round(rect.width);
     const h = Math.round(rect.height);
     if (w > 100 && h > 100) {
-      wv.style.width  = w + 'px';
-      wv.style.height = h + 'px';
+      // setAttribute overwrites the entire style attribute — individual style
+      // property assignment can be silently ignored by Electron's webview element.
+      wv.setAttribute('style', `position:absolute;top:0;left:0;width:${w}px;height:${h}px;display:block;`);
     }
   };
 
