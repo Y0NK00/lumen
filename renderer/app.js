@@ -124,11 +124,15 @@ function forceResizeWebview(webviewId, containerId) {
     const container = document.getElementById(containerId);
     const wv        = document.getElementById(webviewId);
     if (!container || !wv) return;
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    if (w > 50 && h > 50) {
-      wv.style.width  = w + 'px';
-      wv.style.height = h + 'px';
+    // getBoundingClientRect() returns accurate subpixel values even mid-layout,
+    // unlike clientWidth/clientHeight which can lag a paint cycle behind.
+    const rect = container.getBoundingClientRect();
+    const w = Math.round(rect.width);
+    const h = Math.round(rect.height);
+    if (w > 100 && h > 100) {
+      // setAttribute overwrites the entire style attribute — individual style
+      // property assignment can be silently ignored by Electron's webview element.
+      wv.setAttribute('style', `position:absolute;top:0;left:0;width:${w}px;height:${h}px;display:block;`);
     }
   };
 
@@ -143,6 +147,17 @@ function forceResizeWebview(webviewId, containerId) {
       ro.observe(container);
       _webviewObservers[containerId] = ro;
     }
+
+    // MutationObserver on the parent .panel — fires when .active is added/removed
+    // (display:none → display:flex). ResizeObserver alone misses this transition
+    // because Chromium doesn't always fire for elements in a hidden subtree.
+    const panel = container ? container.closest('.panel') : null;
+    if (panel) {
+      const mo = new MutationObserver(() => {
+        if (panel.classList.contains('active')) applySize();
+      });
+      mo.observe(panel, { attributes: true, attributeFilter: ['class'] });
+    }
   }
 }
 
@@ -154,7 +169,14 @@ function switchMode(mode) {
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === `panel-${mode}`));
 
   // Force webview to fill its container (Electron CSS flex doesn't always apply)
-  if (mode === 'driver') forceResizeWebview('webview-driver', 'driver-webview-wrap');
+  if (mode === 'driver') {
+    forceResizeWebview('webview-driver', 'driver-webview-wrap');
+    // Load the webview now that the panel is visible and sized.
+    // We defer src assignment until here so the guest renderer is created with
+    // the correct viewport — if src is set while the panel is hidden the guest
+    // renderer gets a ~0px viewport and style changes alone don't resize it.
+    loadDriverWebview();
+  }
   if (mode === 'chrome') forceResizeWebview('webview-chrome', 'chrome-webview-wrap');
 
   // Sidebar conversations only relevant in chat mode
@@ -191,6 +213,20 @@ function getDriverOverlayHTML() {
   </div>`;
 }
 
+// Load the driver webview — called from switchMode() once the panel is visible.
+// We never set wvDriver.src while the panel is hidden because Electron's guest
+// renderer is created at navigation time; if the element has 0px height then
+// the viewport is stuck at 0px even after the element is later resized.
+function loadDriverWebview() {
+  if (!state.skyvernAvailable || state.driverLoaded) return;
+  const wvDriver = document.getElementById('webview-driver');
+  if (!wvDriver) return;
+  state.driverLoaded = true;
+  // Short delay so forceResizeWebview's d=0 timer has stamped the pixel size
+  // onto the element before we trigger the navigation.
+  setTimeout(() => { wvDriver.src = state.settings.skyvernUrl; }, 80);
+}
+
 async function initWebviews() {
   if (state.webviewsLoaded) return;
   state.webviewsLoaded = true;
@@ -199,6 +235,16 @@ async function initWebviews() {
   const wvCode   = document.getElementById('webview-code');
   const driverOverlay = document.getElementById('driver-overlay');
   const codeOverlay   = document.getElementById('code-overlay');
+
+  // Always wire up webview events regardless of Skyvern availability
+  wvDriver.addEventListener('did-finish-load', () => {
+    driverOverlay.classList.add('hidden');
+    forceResizeWebview('webview-driver', 'driver-webview-wrap');
+  });
+  wvDriver.addEventListener('dom-ready', () => {
+    forceResizeWebview('webview-driver', 'driver-webview-wrap');
+  });
+  wvDriver.addEventListener('did-fail-load', () => { driverOverlay.classList.remove('hidden'); });
 
   // Ping Skyvern API before loading the webview to avoid nginx welcome page
   const skyvernApiUrl = state.settings.skyvernUrl.replace(':8081', ':8000');
@@ -211,19 +257,13 @@ async function initWebviews() {
     skyvernUp = ping.ok || ping.status === 200;
   } catch {}
 
+  state.skyvernAvailable = skyvernUp;
+
   if (skyvernUp) {
-    // Load driver webview — Skyvern is running
+    // Show spinner — src will be set by loadDriverWebview() when the tab is shown
     driverOverlay.innerHTML = `<div class="spinner"></div><p>Connecting to Skyvern…</p>`;
-    wvDriver.src = state.settings.skyvernUrl;
-    wvDriver.addEventListener('did-finish-load', () => {
-      driverOverlay.classList.add('hidden');
-      // Only force-resize if the driver panel is currently active;
-      // switchMode() will handle it when the user navigates there.
-      if (state.mode === 'driver') {
-        forceResizeWebview('webview-driver', 'driver-webview-wrap');
-      }
-    });
-    wvDriver.addEventListener('did-fail-load',   () => { driverOverlay.classList.remove('hidden'); });
+    // If the user is already on the driver tab when initWebviews runs, load now
+    if (state.mode === 'driver') loadDriverWebview();
   } else {
     // Leave overlay visible — Skyvern not reachable
   }
@@ -247,13 +287,16 @@ async function initWebviews() {
       up = r.ok || r.status === 200;
     } catch {}
     if (up) {
-      wvDriver.src = state.settings.skyvernUrl + '?t=' + Date.now();
+      state.skyvernAvailable = true;
+      state.driverLoaded = false; // Allow loadDriverWebview to run again
+      forceResizeWebview('webview-driver', 'driver-webview-wrap');
+      setTimeout(() => { wvDriver.src = state.settings.skyvernUrl + '?t=' + Date.now(); }, 80);
     } else {
       driverOverlay.innerHTML = getDriverOverlayHTML();
       document.getElementById('driver-retry')?.addEventListener('click', retrySkyvern);
     }
   }
-  document.getElementById('driver-retry').addEventListener('click', retrySkyvern);
+  document.getElementById('driver-retry')?.addEventListener('click', retrySkyvern);
 
   // Copy overlay cmd
   document.querySelectorAll('.copy-overlay-btn').forEach(btn => {
