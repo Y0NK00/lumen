@@ -2,18 +2,98 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { exec, spawn } = require('child_process');
+const { google } = require('googleapis');
 
 let mainWindow;
 const userDataPath = app.getPath('userData');
 const conversationsFile = path.join(userDataPath, 'conversations.json');
 const settingsFile      = path.join(userDataPath, 'settings.json');
 const connectorsFile    = path.join(userDataPath, 'connectors.json');
+const TOKEN_PATH        = path.join(userDataPath, 'google_token.json');
 
 function readJSON(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
 }
 function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+}
+
+// OAuth credentials — loaded from oauth.config.json (gitignored, never committed)
+// Copy oauth.config.example.json → oauth.config.json and fill in your credentials.
+let OAUTH_CONFIG = {
+  google: {
+    clientId: '',
+    clientSecret: '',
+    scopes: [
+      'https://www.googleapis.com/auth/drive.readonly',
+      'https://www.googleapis.com/auth/calendar.readonly'
+    ]
+  }
+};
+try {
+  const cfgPath = path.join(__dirname, 'oauth.config.json');
+  const loaded = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+  if (loaded.google) OAUTH_CONFIG.google = { ...OAUTH_CONFIG.google, ...loaded.google };
+} catch {
+  // oauth.config.json not present — Google OAuth will be disabled until configured
+}
+
+// ── Google OAuth helpers ──
+const OAUTH_PORT = 9741; // Local callback port — must be in your Google Cloud Console authorized redirect URIs
+
+async function connectGoogle(mainWin) {
+  const http = require('http');
+  const redirectUri = `http://localhost:${OAUTH_PORT}`;
+
+  const oAuth2Client = new google.auth.OAuth2(
+    OAUTH_CONFIG.google.clientId,
+    OAUTH_CONFIG.google.clientSecret,
+    redirectUri
+  );
+
+  const authUrl = oAuth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: OAUTH_CONFIG.google.scopes,
+    prompt: 'consent',
+  });
+
+  return new Promise((resolve, reject) => {
+    let server;
+    const cleanup = () => { try { server.close(); } catch {} };
+
+    server = http.createServer(async (req, res) => {
+      try {
+        const code = new URL(req.url, redirectUri).searchParams.get('code');
+        if (!code) { res.end('Missing code'); return; }
+
+        // Show a friendly success page in the browser
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(`<html><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f0f0f;color:#fff">
+          <div style="text-align:center"><div style="font-size:48px">✅</div><h2>Connected to Google!</h2><p style="color:#888">You can close this tab and return to Lumen.</p></div>
+        </body></html>`);
+
+        cleanup();
+        const { tokens } = await oAuth2Client.getToken(code);
+        fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
+        mainWin.webContents.send('google-connected', true);
+        resolve();
+      } catch (e) {
+        cleanup();
+        mainWin.webContents.send('google-error', e.message);
+        reject(e);
+      }
+    });
+
+    server.on('error', (e) => reject(new Error(`Port ${OAUTH_PORT} busy: ${e.message}`)));
+
+    server.listen(OAUTH_PORT, 'localhost', () => {
+      // Open in the user's default browser — avoids Electron webview quirks
+      shell.openExternal(authUrl);
+    });
+
+    // Timeout after 5 minutes
+    setTimeout(() => { cleanup(); reject(new Error('Google auth timed out.')); }, 300000);
+  });
 }
 
 function createWindow() {
@@ -57,6 +137,12 @@ ipcMain.handle('data:loadSettings',      () => readJSON(settingsFile, null));
 ipcMain.handle('data:saveSettings',      (_, v) => { writeJSON(settingsFile, v); return true; });
 ipcMain.handle('data:loadConnectors',    () => readJSON(connectorsFile, {}));
 ipcMain.handle('data:saveConnectors',    (_, v) => { writeJSON(connectorsFile, v); return true; });
+
+// ── Google OAuth ──
+ipcMain.handle('connect-google', async () => {
+  await connectGoogle(mainWindow);
+  return { success: true };
+});
 
 // ── Terminal command execution ──
 ipcMain.handle('terminal:run', async (_, cmd) => {

@@ -6,3 +6,4 @@ Thumbs.db
 userData/
 *.env
 .env
+oauth.config.json

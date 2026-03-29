@@ -31,6 +31,8 @@ let state = {
   settings: { ...DEFAULT_SETTINGS },
   connectors: {},
   chatStreaming: false,
+  stopRequested: false,
+  streamController: null,
   codeWorking: false,
   webviewsLoaded: false,
   termHistory: [],
@@ -85,6 +87,12 @@ async function init() {
   // Load webviews and Chrome after tiny delay so UI renders first
   setTimeout(initWebviews, 600);
   setTimeout(initChrome, 700);
+
+  // Re-size webviews whenever the window is resized
+  window.addEventListener('resize', () => {
+    if (state.mode === 'driver') forceResizeWebview('webview-driver', 'driver-webview-wrap');
+    if (state.mode === 'chrome') forceResizeWebview('webview-chrome', 'chrome-webview-wrap');
+  });
 }
 
 // ── THEMES ──────────────────────────────────
@@ -98,6 +106,44 @@ function applyFontSize(sz) {
 }
 
 // ── MODE / TAB SWITCHING ──────────────────────
+// ResizeObserver registry — one observer per container, set up once
+const _webviewObservers = {};
+
+function forceResizeWebview(webviewId, containerId) {
+  // Strategy: let CSS flex size the *container* correctly (don't touch it),
+  // then read its actual rendered clientWidth/clientHeight and stamp those
+  // explicit pixel values onto the <webview> element only.
+  // Electron webviews ignore CSS % heights from flex parents — they need px.
+  //
+  // We retry at increasing delays to catch whatever layout pass settles last,
+  // and we install a ResizeObserver so it stays correct on every window resize.
+
+  const applySize = () => {
+    const container = document.getElementById(containerId);
+    const wv        = document.getElementById(webviewId);
+    if (!container || !wv) return;
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (w > 50 && h > 50) {
+      wv.style.width  = w + 'px';
+      wv.style.height = h + 'px';
+    }
+  };
+
+  // Fire immediately + at increasing delays until we get a valid measurement
+  [0, 50, 150, 400, 1000, 2000].forEach(d => setTimeout(applySize, d));
+
+  // Install ResizeObserver so the webview stays sized on every layout change
+  if (!_webviewObservers[containerId]) {
+    const container = document.getElementById(containerId);
+    if (container && typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(applySize);
+      ro.observe(container);
+      _webviewObservers[containerId] = ro;
+    }
+  }
+}
+
 function switchMode(mode) {
   if (state.mode === mode) return;
   state.mode = mode;
@@ -105,10 +151,19 @@ function switchMode(mode) {
   document.querySelectorAll('.top-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === `panel-${mode}`));
 
+  // Force webview to fill its container (Electron CSS flex doesn't always apply)
+  if (mode === 'driver') forceResizeWebview('webview-driver', 'driver-webview-wrap');
+  if (mode === 'chrome') forceResizeWebview('webview-chrome', 'chrome-webview-wrap');
+
   // Sidebar conversations only relevant in chat mode
   const showConvs = mode === 'chat';
   document.getElementById('btn-new-chat').style.display = showConvs ? '' : 'none';
-  document.getElementById('conversations-wrapper').style.display = showConvs ? '' : 'none';
+  // Keep conversations-wrapper VISIBLE as a flex:1 spacer so sidebar footer stays at the bottom.
+  // Just hide its inner list, not the wrapper itself.
+  const convList = document.getElementById('conversations-list');
+  const convLabel = document.querySelector('.conv-group-label');
+  if (convList) convList.style.display = showConvs ? '' : 'none';
+  if (convLabel) convLabel.style.display = showConvs ? '' : 'none';
 }
 
 function switchCodeTab(tab) {
@@ -158,7 +213,14 @@ async function initWebviews() {
     // Load driver webview — Skyvern is running
     driverOverlay.innerHTML = `<div class="spinner"></div><p>Connecting to Skyvern…</p>`;
     wvDriver.src = state.settings.skyvernUrl;
-    wvDriver.addEventListener('did-finish-load', () => { driverOverlay.classList.add('hidden'); });
+    wvDriver.addEventListener('did-finish-load', () => {
+      driverOverlay.classList.add('hidden');
+      // Only force-resize if the driver panel is currently active;
+      // switchMode() will handle it when the user navigates there.
+      if (state.mode === 'driver') {
+        forceResizeWebview('webview-driver', 'driver-webview-wrap');
+      }
+    });
     wvDriver.addEventListener('did-fail-load',   () => { driverOverlay.classList.remove('hidden'); });
   } else {
     // Leave overlay visible — Skyvern not reachable
@@ -313,7 +375,7 @@ function renderMsg(m) {
     <div class="message-wrap"><div class="message ${m.role}">
       <div class="message-header">
         <div class="msg-avatar ${u?'user':'ai'}">${u?'W':'⚡'}</div>
-        <span class="msg-name">${u?'You':'Tower AI'}</span>
+        <span class="msg-name">${u?'You':'Lumen'}</span>
         <span class="msg-time">${m.timestamp?fmtTime(m.timestamp):''}</span>
       </div>
       ${body}
@@ -324,7 +386,7 @@ function appendThinking() {
   const el = document.getElementById('chat-messages');
   const d = document.createElement('div');
   d.id = 'thinking-el'; d.className = 'message-wrap';
-  d.innerHTML = `<div class="message ai"><div class="message-header"><div class="msg-avatar ai">⚡</div><span class="msg-name">Tower AI</span></div><div class="thinking"><div class="thinking-dot"></div><div class="thinking-dot"></div><div class="thinking-dot"></div></div></div>`;
+  d.innerHTML = `<div class="message ai"><div class="message-header"><div class="msg-avatar ai">⚡</div><span class="msg-name">Lumen</span></div><div class="thinking"><div class="thinking-dot"></div><div class="thinking-dot"></div><div class="thinking-dot"></div></div></div>`;
   el.appendChild(d); el.scrollTop = el.scrollHeight;
 }
 function replaceThinking(content) {
@@ -337,8 +399,10 @@ function appendStreaming() {
   const el = document.getElementById('chat-messages');
   const d = document.createElement('div');
   d.id = 'streaming-el'; d.className = 'message-wrap';
-  d.innerHTML = `<div class="message ai"><div class="message-header"><div class="msg-avatar ai">⚡</div><span class="msg-name">Tower AI</span></div><div class="message-body" id="streaming-body"></div></div>`;
+  // Show thinking dots while waiting for model to respond
+  d.innerHTML = `<div class="message ai"><div class="message-header"><div class="msg-avatar ai">⚡</div><span class="msg-name">Lumen</span></div><div class="message-body" id="streaming-body"><div class="thinking"><div class="thinking-dot"></div><div class="thinking-dot"></div><div class="thinking-dot"></div></div></div></div>`;
   el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
 }
 function updateStreaming(text) {
   const b = document.getElementById('streaming-body');
@@ -406,7 +470,9 @@ async function sendChat() {
   if (contextPrefix) clearVaultContext(); // clear chips after sending
 
   state.chatStreaming = true;
+  state.stopRequested = false;
   document.getElementById('btn-send').disabled = true;
+  document.getElementById('btn-stop').classList.add('visible');
 
   try {
     if (state.settings.streaming) {
@@ -420,10 +486,29 @@ async function sendChat() {
       save();
     }
   } catch(err) {
-    replaceThinking(`❌ **Error connecting to Ollama**\n\nMake sure Ollama is running at \`${state.settings.ollamaUrl}\`\n\n\`${err.message}\``);
+    let errMsg;
+    if (state.stopRequested) {
+      errMsg = `⏹ **Generation stopped.**`;
+    } else if (err.name === 'AbortError') {
+      errMsg = `⏱ **Request timed out after 3 minutes.**\n\nOllama is likely running **without GPU acceleration**, which makes large models extremely slow.\n\n**To fix on Unraid:**\n1. Go to Docker → click Ollama → Edit\n2. Add \`--gpus=all\` to **Extra Parameters**\n3. Apply & restart the container\n\nAlternatively, use a smaller model like **Llama 3.2 · 3B** which can run on CPU.`;
+    } else {
+      errMsg = `❌ **Error connecting to Ollama**\n\nMake sure Ollama is running at \`${state.settings.ollamaUrl}\`\n\n\`${err.message}\``;
+    }
+    // Clear streaming/thinking elements
+    const streamEl = document.getElementById('streaming-el');
+    if (streamEl) streamEl.remove();
+    const thinkEl = document.getElementById('thinking-el');
+    if (thinkEl) thinkEl.remove();
+    showChatMessages();
+    const errEl = document.createElement('div');
+    errEl.className = 'message-wrap';
+    errEl.innerHTML = renderMsg({role:'assistant', content:errMsg, timestamp:Date.now()});
+    document.getElementById('chat-messages').appendChild(errEl);
   } finally {
     state.chatStreaming = false;
+    state.stopRequested = false;
     document.getElementById('btn-send').disabled = false;
+    document.getElementById('btn-stop').classList.remove('visible');
     input.focus();
   }
 }
@@ -431,23 +516,55 @@ async function sendChat() {
 async function streamChat(msgs, model, conv) {
   appendStreaming();
   let full = '', buf = '';
-  const res = await fetch(`${state.settings.ollamaUrl}/api/chat`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({model, messages:msgs, stream:true}),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  while (true) {
-    const {done,value} = await reader.read();
-    if (done) break;
-    buf += dec.decode(value,{stream:true});
-    const lines = buf.split('\n'); buf = lines.pop();
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try { const d=JSON.parse(line); if (d.message?.content){full+=d.message.content;updateStreaming(full);} } catch{}
+  const controller = new AbortController();
+  state.streamController = controller;
+
+  // Abort after 3 minutes — enough for GPU, but won't hang forever on CPU-only
+  const timeoutId  = setTimeout(() => { state.stopRequested = false; controller.abort(); }, 180000);
+
+  // After 5s: show loading hint
+  const hintTimer  = setTimeout(() => {
+    const b = document.getElementById('streaming-body');
+    if (b) b.innerHTML = `<div class="thinking"><div class="thinking-dot"></div><div class="thinking-dot"></div><div class="thinking-dot"></div></div><div style="font-size:12px;color:var(--text-muted);margin-top:8px;">Loading model into memory — this can take 30–60s on first use…</div>`;
+  }, 5000);
+
+  // After 90s on CPU this is probably not coming — show GPU nudge
+  const gpuHintTimer = setTimeout(() => {
+    const b = document.getElementById('streaming-body');
+    if (b) b.innerHTML = `<div class="thinking"><div class="thinking-dot"></div><div class="thinking-dot"></div><div class="thinking-dot"></div></div><div style="font-size:12px;color:var(--text-muted);margin-top:8px;">Still loading… If this always hangs, Ollama may be running <strong>without GPU</strong>.<br>In Unraid → Docker → Ollama → Edit, add <code style="background:var(--bg-hover);padding:1px 5px;border-radius:3px">--gpus=all</code> to Extra Parameters.</div>`;
+  }, 90000);
+
+  try {
+    const res = await fetch(`${state.settings.ollamaUrl}/api/chat`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({model, messages:msgs, stream:true}),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const errBody = await res.text().catch(()=>'');
+      throw new Error(`HTTP ${res.status}${errBody ? ': ' + errBody.slice(0,200) : ''}`);
     }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    while (true) {
+      const {done,value} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value,{stream:true});
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const d = JSON.parse(line);
+          if (d.error) throw new Error(d.error);
+          if (d.message?.content) { full += d.message.content; updateStreaming(full); }
+        } catch(e) { if (e.message && !e.message.startsWith('JSON')) throw e; }
+      }
+    }
+  } finally {
+    clearTimeout(timeoutId); clearTimeout(hintTimer); clearTimeout(gpuHintTimer);
+    state.streamController = null;
   }
+  if (!full) throw new Error(`Model "${model}" returned an empty response. Is it loaded in Ollama?`);
   finalizeStreaming(full);
   conv.messages.push({role:'assistant',content:full,timestamp:Date.now()});
   conv.updatedAt = Date.now();
@@ -622,7 +739,7 @@ async function runTerminalCmd(cmd) {
   }
   if (cmd.startsWith('ai ')) {
     const question = cmd.slice(3).trim();
-    termLog(`Asking Tower AI: ${question}`, 'info');
+    termLog(`Asking Lumen: ${question}`, 'info');
     try {
       const res = await fetchChat([{role:'user',content:question}], state.settings.codeModel||'qwen2.5-coder:14b');
       res.split('\n').forEach(l => termLog(l,'out'));
@@ -787,6 +904,16 @@ function openSettings(sec) {
   populateSettingsForm();
   updateSettingsConnectorSummary();
   switchSettingsSection(sec || 'general');
+  // Sync the profile footer in the settings nav
+  const name  = state.settings.displayName || 'Will';
+  const email = state.settings.email || 'dejavuyonko@gmail.com';
+  const avatar = name.charAt(0).toUpperCase();
+  const el = document.getElementById('snav-profile-avatar');
+  if (el) el.textContent = avatar;
+  const ne = document.getElementById('snav-profile-name');
+  if (ne) ne.textContent = name;
+  const ee = document.getElementById('snav-profile-email');
+  if (ee) ee.textContent = email;
 }
 function closeSettings() {
   document.getElementById('settings-panel').classList.add('hidden');
@@ -1266,6 +1393,16 @@ function clearActiveSkill() {
   state.settings.activeSkillId = null;
   window.tower.saveSettings(state.settings);
   renderSkillsList();
+  // Update the skill pick button label
+  const label = document.getElementById('btn-skill-pick-label');
+  if (label) label.textContent = 'Skill';
+  // Hide the active skill chip in the input footer
+  const chip = document.getElementById('active-skill-chip');
+  if (chip) chip.style.display = 'none';
+  // Close skill popup if open
+  const popup = document.getElementById('skill-popup');
+  if (popup) popup.classList.add('hidden');
+  document.getElementById('btn-skill-pick')?.classList.remove('active');
 }
 
 function openSkillEditor(id) {
@@ -1707,14 +1844,7 @@ function setActiveSkillFromPopup(id) {
   if (label) label.textContent = skill ? skill.name : 'Skill';
   closeSkillPopup();
 }
-// Override clearActiveSkill to also update button label
-const _origClearSkill = clearActiveSkill;
-function clearActiveSkill() {
-  _origClearSkill();
-  const label = document.getElementById('btn-skill-pick-label');
-  if (label) label.textContent = 'Skill';
-  closeSkillPopup();
-}
+// (clearActiveSkill is defined above with all label/popup logic merged in)
 
 // ── FILE ATTACHMENT ──────────────────────────
 let attachedFiles = []; // { name, type, dataUrl, text }
@@ -1924,10 +2054,24 @@ function bindEvents() {
   // Theme swatches
   document.querySelectorAll('.swatch').forEach(s => s.addEventListener('click', () => applyTheme(s.dataset.theme)));
 
+  // Stop button — abort current streaming generation
+  document.getElementById('btn-stop').addEventListener('click', () => {
+    if (state.streamController) {
+      state.stopRequested = true;
+      state.streamController.abort();
+    }
+  });
+
   // Profile button — toggle profile popup
   document.getElementById('btn-profile').addEventListener('click', (e) => {
     e.stopPropagation();
     document.getElementById('profile-popup').classList.toggle('hidden');
+  });
+
+  // Settings nav profile footer — close settings and open profile popup
+  document.getElementById('snav-profile-btn').addEventListener('click', () => {
+    closeSettings();
+    setTimeout(() => document.getElementById('profile-popup').classList.remove('hidden'), 150);
   });
   // Close profile popup when clicking outside
   document.addEventListener('click', () => {
@@ -1988,20 +2132,112 @@ function bindEvents() {
     }
   });
 
-  // Connector toggles
-  document.querySelectorAll('.connector-toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
+  // ── Connector modal ──
+  let currentModalConnector = null;
+
+  function openConnectorModal(key) {
+    currentModalConnector = key;
+    document.querySelectorAll('.connector-cfg').forEach(el => el.classList.add('hidden'));
+    const cfg = document.getElementById(`cfg-${key}`);
+    if (cfg) cfg.classList.remove('hidden');
+    const name = document.querySelector(`.connector-card[data-connector="${key}"] .connector-name`)?.textContent || key;
+    document.getElementById('cmodal-title').textContent = `Configure ${name}`;
+    loadConnectorValues(key);
+    document.getElementById('connector-modal').classList.remove('hidden');
+  }
+
+  function closeConnectorModal() {
+    document.getElementById('connector-modal').classList.add('hidden');
+    currentModalConnector = null;
+  }
+
+  function loadConnectorValues(key) {
+    const c = state.connectors[key] || {};
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+    switch(key) {
+      case 'github':        set('github-token', c.token); break;
+      case 'telegram':      set('telegram-token', c.token); set('telegram-chatid', c.chatId); break;
+      case 'n8n':           set('n8n-url', c.url); break;
+      case 'flowise':       set('flowise-url', c.url); break;
+      case 'obsidian':      set('obsidian-url', c.url); set('obsidian-key', c.key); set('obsidian-folder', c.folder); break;
+      case 'skyvern':       set('skyvern-url', c.url); set('skyvern-key', c.key); break;
+      case 'openhands':     set('openhands-conn-url', c.url); break;
+      case 'homeassistant': set('homeassistant-url', c.url); set('homeassistant-token', c.token); break;
+      case 'netdata':       set('netdata-url', c.url); break;
+    }
+  }
+
+  // Gear buttons → open modal
+  document.querySelectorAll('.connector-settings-btn').forEach(btn => {
+    btn.addEventListener('click', () => openConnectorModal(btn.dataset.for));
+  });
+
+  // Connect buttons → test connection (or open modal for Gmail OAuth)
+  document.querySelectorAll('.connector-connect-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
       const key = btn.dataset.for;
-      const body = document.getElementById(`${key}-config`);
-      if (!body) return;
-      const hidden = body.classList.toggle('hidden');
-      btn.textContent = hidden ? 'Configure ↓' : 'Hide ↑';
+      if (key === 'gmail') { openConnectorModal('gmail'); }
+      else { await testConnector(key); }
     });
   });
 
-  // Test buttons
+  // Modal close / cancel / backdrop
+  document.getElementById('cmodal-close')?.addEventListener('click', closeConnectorModal);
+  document.getElementById('cmodal-cancel')?.addEventListener('click', closeConnectorModal);
+  document.querySelector('.cmodal-backdrop')?.addEventListener('click', closeConnectorModal);
+
+  // Modal Save & Test
+  document.getElementById('cmodal-save')?.addEventListener('click', async () => {
+    if (currentModalConnector && currentModalConnector !== 'gmail') {
+      await testConnector(currentModalConnector);
+    }
+  });
+
+  // Test buttons inside modal
   document.querySelectorAll('.test-btn').forEach(btn => {
     btn.addEventListener('click', () => testConnector(btn.dataset.test));
+  });
+
+  // Settings topbar window controls
+  document.getElementById('s-btn-minimize')?.addEventListener('click', window.tower.minimize);
+  document.getElementById('s-btn-maximize')?.addEventListener('click', window.tower.maximize);
+  document.getElementById('s-btn-close')?.addEventListener('click', window.tower.close);
+
+  // Google OAuth — Connect button (inside modal)
+  document.getElementById('btn-connect-google')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-connect-google');
+    const status = document.getElementById('google-connect-status');
+    btn.disabled = true;
+    btn.textContent = 'Opening browser…';
+    if (status) status.textContent = 'A Google sign-in page is opening in your browser. Complete it there, then come back.';
+    try {
+      await window.tower.connectGoogle();
+      // Success handled by onGoogleConnected event
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Connect with Google';
+      if (status) status.textContent = '❌ Error: ' + e.message;
+    }
+  });
+
+  // Listen for google-error event from main process
+  window.tower.onGoogleError?.((err) => {
+    const btn = document.getElementById('btn-connect-google');
+    const status = document.getElementById('google-connect-status');
+    if (btn) { btn.disabled = false; btn.textContent = 'Connect with Google'; }
+    if (status) status.textContent = '❌ Error: ' + err;
+  });
+
+  window.tower.onGoogleConnected(() => {
+    const btn = document.getElementById('btn-connect-google');
+    const status = document.getElementById('google-connect-status');
+    const pill = document.querySelector('.connector-status-pill[data-for="gmail"]');
+    if (btn) { btn.textContent = '✓ Connected'; btn.disabled = true; }
+    if (status) status.textContent = 'Google account connected successfully.';
+    if (pill) { pill.textContent = 'Connected'; pill.className = 'connector-status-pill connected'; }
+    const card = document.querySelector('.connector-card[data-connector="gmail"]');
+    if (card) card.classList.add('connected');
+    closeConnectorModal();
   });
 
   // Skill overlay click handler

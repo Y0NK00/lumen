@@ -21,4 +21,9 @@ contextBridge.exposeInMainWorld('tower', {
   readFile:   (path)             => ipcRenderer.invoke('fs:readFile', path),
   writeFile:  (path, content)    => ipcRenderer.invoke('fs:writeFile', path, content),
   listDir:    (path)             => ipcRenderer.invoke('fs:listDir', path),
+
+  // Google OAuth
+  connectGoogle:     ()          => ipcRenderer.invoke('connect-google'),
+  onGoogleConnected: (cb)        => ipcRenderer.on('google-connected', cb),
+  onGoogleError:     (cb)        => ipcRenderer.on('google-error', cb),
 });

@@ -208,6 +208,9 @@
             <button id="btn-send" title="Send (Enter)">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
             </button>
+            <button id="btn-stop" title="Stop generating">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+            </button>
           </div>
           <div id="input-footer">
             <div id="model-selector-wrap">
@@ -255,7 +258,7 @@
             <button class="tool-btn" id="driver-popout">⬡ Open in browser</button>
           </div>
         </div>
-        <div class="webview-container">
+        <div class="webview-container" id="driver-webview-wrap">
           <webview id="webview-driver" src="about:blank" allowpopups partition="persist:driver"></webview>
           <div class="embed-overlay" id="driver-overlay">
             <div class="overlay-card">
@@ -276,7 +279,55 @@
 
       <!-- ════ CODE BOT PANEL ════ -->
       <div id="panel-code" class="panel">
-        <!-- Task input bar -->
+
+        <!-- Code Bot tabs -->
+        <div id="code-tabs">
+          <button class="code-tab active" data-codetab="assistant">💬 Assistant</button>
+          <button class="code-tab" data-codetab="terminal">⬛ Terminal</button>
+          <button class="code-tab" data-codetab="openhands">🤖 OpenHands</button>
+        </div>
+
+        <!-- Panel content wrapper (fills remaining space) -->
+        <div id="code-panels-wrap">
+
+          <!-- Assistant view -->
+          <div id="codetab-assistant" class="code-panel active">
+            <div id="code-messages">
+              <div class="code-welcome">
+                <p>Describe a task below. The AI will plan it, write code, and walk you through each step.</p>
+                <p class="code-welcome-sub">Tip: Be specific — "Write a Python script that reads a CSV, cleans null values, and outputs a summary report" works better than "write a script".</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Terminal view -->
+          <div id="codetab-terminal" class="code-panel">
+            <div id="terminal-wrap">
+              <div id="terminal-output">
+                <div class="term-line system">Lumen Terminal — type a command below or use Code Bot to run tasks automatically</div>
+              </div>
+              <div id="terminal-input-row">
+                <span class="term-prompt">$</span>
+                <input type="text" id="terminal-input" placeholder="Enter shell command…" autocomplete="off" spellcheck="false"/>
+                <button id="terminal-send">Run</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- OpenHands view (webview stays loaded always) -->
+          <div id="codetab-openhands" class="code-panel">
+            <div class="webview-container">
+              <webview id="webview-code" src="about:blank" allowpopups partition="persist:code"></webview>
+              <div class="embed-overlay" id="code-overlay">
+                <div class="spinner"></div>
+                <p>Loading OpenHands…</p>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /code-panels-wrap -->
+
+        <!-- Task input bar — pinned to bottom -->
         <div id="code-task-bar">
           <div id="code-task-input-wrap">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
@@ -297,47 +348,6 @@
           </div>
         </div>
 
-        <!-- Code Bot tabs -->
-        <div id="code-tabs">
-          <button class="code-tab active" data-codetab="assistant">💬 Assistant</button>
-          <button class="code-tab" data-codetab="terminal">⬛ Terminal</button>
-          <button class="code-tab" data-codetab="openhands">🤖 OpenHands</button>
-        </div>
-
-        <!-- Assistant view -->
-        <div id="codetab-assistant" class="code-panel active">
-          <div id="code-messages">
-            <div class="code-welcome">
-              <p>Describe a task above. The AI will plan it, write code, and walk you through each step.</p>
-              <p class="code-welcome-sub">Tip: Be specific — "Write a Python script that reads a CSV, cleans null values, and outputs a summary report" works better than "write a script".</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Terminal view -->
-        <div id="codetab-terminal" class="code-panel">
-          <div id="terminal-wrap">
-            <div id="terminal-output">
-              <div class="term-line system">Tower AI Terminal — type a command below or use Code Bot to run tasks automatically</div>
-            </div>
-            <div id="terminal-input-row">
-              <span class="term-prompt">$</span>
-              <input type="text" id="terminal-input" placeholder="Enter shell command…" autocomplete="off" spellcheck="false"/>
-              <button id="terminal-send">Run</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- OpenHands view (webview stays loaded always) -->
-        <div id="codetab-openhands" class="code-panel">
-          <div class="webview-container" style="height:100%">
-            <webview id="webview-code" src="about:blank" allowpopups partition="persist:code"></webview>
-            <div class="embed-overlay" id="code-overlay">
-              <div class="spinner"></div>
-              <p>Loading OpenHands…</p>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- ════ CHROME PANEL ════ -->
@@ -355,7 +365,7 @@
           </div>
         </div>
         <div style="display:flex;flex:1;overflow:hidden;gap:0">
-          <div class="webview-container" style="flex:1">
+          <div class="webview-container" id="chrome-webview-wrap" style="flex:1">
             <webview id="webview-chrome" src="about:blank" allowpopups partition="persist:chrome"></webview>
             <div class="embed-overlay" id="chrome-overlay">
               <div class="overlay-card">
@@ -441,6 +451,11 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
     </button>
     <span id="settings-topbar-title">Settings</span>
+    <div id="settings-win-controls">
+      <button id="s-btn-minimize" title="Minimize">─</button>
+      <button id="s-btn-maximize" title="Maximize">□</button>
+      <button id="s-btn-close"    title="Close">✕</button>
+    </div>
   </div>
 
   <!-- Body: left nav + content -->
@@ -482,6 +497,16 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         About
       </button>
+      <!-- Profile footer — persistent at bottom of settings nav -->
+      <div id="snav-footer">
+        <button id="snav-profile-btn" title="View profile">
+          <div id="snav-profile-avatar">W</div>
+          <div id="snav-profile-info">
+            <span id="snav-profile-name">Will</span>
+            <span id="snav-profile-email">dejavuyonko@gmail.com</span>
+          </div>
+        </button>
+      </div>
     </nav>
 
     <!-- Content area -->
@@ -815,169 +840,130 @@
           <div class="connector-card" data-connector="github">
             <div class="connector-header">
               <svg class="connector-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.15-1.1-1.46-1.1-1.46-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.64.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.6 9.6 0 0 1 12 6.84a9.6 9.6 0 0 1 2.5.34c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
-              <div><div class="connector-name">GitHub</div><div class="connector-desc">Repos, issues, pull requests, code</div></div>
-              <div class="connector-status-pill" data-for="github">Not connected</div>
+              <div class="connector-info"><div class="connector-name">GitHub</div><div class="connector-desc">Repos, issues, pull requests, code</div></div>
+              <div class="connector-actions">
+                <div class="connector-status-pill" data-for="github">Not connected</div>
+                <button class="connector-connect-btn" data-for="github">Connect</button>
+                <button class="connector-settings-btn" data-for="github" title="Configure"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
             </div>
-            <div class="connector-body hidden" id="github-config">
-              <label>Personal Access Token</label>
-              <div class="token-row"><input type="password" id="github-token" placeholder="ghp_xxxxxxxxxxxx"/><button class="test-btn" data-test="github">Test</button></div>
-              <p class="help-text">Generate at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a> — needs <code>repo</code>, <code>workflow</code> scopes</p>
-              <div class="connector-result" id="github-result"></div>
-            </div>
-            <button class="connector-toggle" data-for="github">Configure ↓</button>
           </div>
 
           <!-- Gmail -->
           <div class="connector-card" data-connector="gmail">
             <div class="connector-header">
-              <svg class="connector-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" fill="#EA4335"/></svg>
-              <div><div class="connector-name">Gmail</div><div class="connector-desc">Read emails, draft replies, trigger workflows</div></div>
-              <div class="connector-status-pill" data-for="gmail">Not connected</div>
+              <svg class="connector-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" fill="#EA4335"/></svg>
+              <div class="connector-info"><div class="connector-name">Gmail</div><div class="connector-desc">Read emails, draft replies, trigger workflows</div></div>
+              <div class="connector-actions">
+                <div class="connector-status-pill" data-for="gmail">Not connected</div>
+                <button class="connector-connect-btn" data-for="gmail">Connect</button>
+                <button class="connector-settings-btn" data-for="gmail" title="Configure"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
             </div>
-            <div class="connector-body hidden" id="gmail-config">
-              <p class="help-text">Gmail requires a Google OAuth app. Follow the guide in <strong>n8n-connectors-guide.md</strong> (Step 3) to set it up, then connect from n8n.</p>
-              <a class="open-link-btn" href="http://10.0.0.22:5678" target="_blank">Open n8n to connect Gmail →</a>
-            </div>
-            <button class="connector-toggle" data-for="gmail">Configure ↓</button>
           </div>
 
           <!-- Telegram -->
           <div class="connector-card" data-connector="telegram">
             <div class="connector-header">
               <svg class="connector-icon" viewBox="0 0 24 24" fill="#2CA5E0"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8-1.7 8.02c-.13.58-.48.72-.97.45l-2.67-1.97-1.29 1.24c-.14.14-.27.27-.55.27l.2-2.79 5.1-4.61c.22-.2-.05-.3-.34-.11l-6.31 3.97-2.72-.85c-.59-.18-.6-.59.12-.87l10.63-4.1c.5-.18.93.12.5 1.35z"/></svg>
-              <div><div class="connector-name">Telegram</div><div class="connector-desc">Send/receive messages, phone notifications</div></div>
-              <div class="connector-status-pill" data-for="telegram">Not connected</div>
+              <div class="connector-info"><div class="connector-name">Telegram</div><div class="connector-desc">Send/receive messages, phone notifications</div></div>
+              <div class="connector-actions">
+                <div class="connector-status-pill" data-for="telegram">Not connected</div>
+                <button class="connector-connect-btn" data-for="telegram">Connect</button>
+                <button class="connector-settings-btn" data-for="telegram" title="Configure"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
             </div>
-            <div class="connector-body hidden" id="telegram-config">
-              <label>Bot Token</label>
-              <div class="token-row"><input type="password" id="telegram-token" placeholder="1234567890:ABCDef..."/><button class="test-btn" data-test="telegram">Test</button></div>
-              <label>Your Chat ID</label>
-              <input type="text" id="telegram-chatid" placeholder="123456789"/>
-              <p class="help-text">Message <strong>@BotFather</strong> on Telegram to create a bot (see n8n guide Step 5)</p>
-              <div class="connector-result" id="telegram-result"></div>
-            </div>
-            <button class="connector-toggle" data-for="telegram">Configure ↓</button>
           </div>
 
           <!-- Obsidian -->
           <div class="connector-card" data-connector="obsidian">
             <div class="connector-header">
               <svg class="connector-icon" viewBox="0 0 24 24" fill="#7C3AED"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-              <div><div class="connector-name">Obsidian</div><div class="connector-desc">Project notes, knowledge base, vault storage</div></div>
-              <div class="connector-status-pill" data-for="obsidian">Not connected</div>
+              <div class="connector-info"><div class="connector-name">Obsidian</div><div class="connector-desc">Project notes, knowledge base, vault storage</div></div>
+              <div class="connector-actions">
+                <div class="connector-status-pill" data-for="obsidian">Not connected</div>
+                <button class="connector-connect-btn" data-for="obsidian">Connect</button>
+                <button class="connector-settings-btn" data-for="obsidian" title="Configure"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
             </div>
-            <div class="connector-body hidden" id="obsidian-config">
-              <label>Local REST API URL</label>
-              <div class="token-row"><input type="text" id="obsidian-url" placeholder="http://127.0.0.1:27123"/><button class="test-btn" data-test="obsidian">Test</button></div>
-              <label>API Key (from plugin settings)</label>
-              <input type="password" id="obsidian-key" placeholder="your-api-key"/>
-              <label>Default Vault Folder</label>
-              <input type="text" id="obsidian-folder" placeholder="Lumen/"/>
-              <p class="help-text">Install the <strong>Local REST API</strong> community plugin in Obsidian. Once connected, Lumen can save conversations, Code Bot results, and project notes directly to your vault.</p>
-              <div class="connector-result" id="obsidian-result"></div>
-            </div>
-            <button class="connector-toggle" data-for="obsidian">Configure ↓</button>
           </div>
 
           <!-- n8n -->
           <div class="connector-card" data-connector="n8n">
             <div class="connector-header">
               <svg class="connector-icon" viewBox="0 0 24 24" fill="#EA4B71"><circle cx="12" cy="12" r="10"/><path d="M7 12h10M12 7v10" stroke="white" stroke-width="2"/></svg>
-              <div><div class="connector-name">n8n Automation</div><div class="connector-desc">Trigger workflows, monitor automations</div></div>
-              <div class="connector-status-pill" data-for="n8n">Not connected</div>
+              <div class="connector-info"><div class="connector-name">n8n Automation</div><div class="connector-desc">Trigger workflows, monitor automations</div></div>
+              <div class="connector-actions">
+                <div class="connector-status-pill" data-for="n8n">Not connected</div>
+                <button class="connector-connect-btn" data-for="n8n">Connect</button>
+                <button class="connector-settings-btn" data-for="n8n" title="Configure"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
             </div>
-            <div class="connector-body hidden" id="n8n-config">
-              <label>n8n URL</label>
-              <div class="token-row"><input type="text" id="n8n-url" placeholder="http://10.0.0.22:5678"/><button class="test-btn" data-test="n8n">Test</button></div>
-              <label>API Key (Settings → API in n8n)</label>
-              <input type="password" id="n8n-key" placeholder="n8n_api_key..."/>
-              <div class="connector-result" id="n8n-result"></div>
-              <a class="open-link-btn" href="http://10.0.0.22:5678" target="_blank">Open n8n →</a>
-            </div>
-            <button class="connector-toggle" data-for="n8n">Configure ↓</button>
           </div>
 
           <!-- Flowise -->
           <div class="connector-card" data-connector="flowise">
             <div class="connector-header">
               <svg class="connector-icon" viewBox="0 0 24 24" fill="#7C3AED"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-              <div><div class="connector-name">Flowise</div><div class="connector-desc">AI agent skills, chatflows, RAG pipelines</div></div>
-              <div class="connector-status-pill" data-for="flowise">Not connected</div>
+              <div class="connector-info"><div class="connector-name">Flowise</div><div class="connector-desc">AI agent skills, chatflows, RAG pipelines</div></div>
+              <div class="connector-actions">
+                <div class="connector-status-pill" data-for="flowise">Not connected</div>
+                <button class="connector-connect-btn" data-for="flowise">Connect</button>
+                <button class="connector-settings-btn" data-for="flowise" title="Configure"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
             </div>
-            <div class="connector-body hidden" id="flowise-config">
-              <label>Flowise URL</label>
-              <div class="token-row"><input type="text" id="flowise-url" placeholder="http://10.0.0.22:3002"/><button class="test-btn" data-test="flowise">Test</button></div>
-              <div class="connector-result" id="flowise-result"></div>
-              <a class="open-link-btn" href="http://10.0.0.22:3002" target="_blank">Open Flowise →</a>
-            </div>
-            <button class="connector-toggle" data-for="flowise">Configure ↓</button>
           </div>
 
           <!-- Skyvern -->
           <div class="connector-card" data-connector="skyvern">
             <div class="connector-header">
               <svg class="connector-icon" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-              <div><div class="connector-name">Skyvern (AI Driver)</div><div class="connector-desc">Browser automation backend</div></div>
-              <div class="connector-status-pill" data-for="skyvern">Not connected</div>
+              <div class="connector-info"><div class="connector-name">Skyvern (AI Driver)</div><div class="connector-desc">Browser automation backend</div></div>
+              <div class="connector-actions">
+                <div class="connector-status-pill" data-for="skyvern">Not connected</div>
+                <button class="connector-connect-btn" data-for="skyvern">Connect</button>
+                <button class="connector-settings-btn" data-for="skyvern" title="Configure"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
             </div>
-            <div class="connector-body hidden" id="skyvern-config">
-              <label>Skyvern API URL</label>
-              <div class="token-row"><input type="text" id="skyvern-url" placeholder="http://10.0.0.22:8000"/><button class="test-btn" data-test="skyvern">Test</button></div>
-              <label>API Key</label>
-              <input type="password" id="skyvern-key" placeholder="tower-skyvern-key"/>
-              <div class="connector-result" id="skyvern-result"></div>
-            </div>
-            <button class="connector-toggle" data-for="skyvern">Configure ↓</button>
           </div>
 
           <!-- OpenHands -->
           <div class="connector-card" data-connector="openhands">
             <div class="connector-header">
               <svg class="connector-icon" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-              <div><div class="connector-name">OpenHands</div><div class="connector-desc">Code Bot AI agent backend</div></div>
-              <div class="connector-status-pill" data-for="openhands">Not connected</div>
+              <div class="connector-info"><div class="connector-name">OpenHands</div><div class="connector-desc">Code Bot AI agent backend</div></div>
+              <div class="connector-actions">
+                <div class="connector-status-pill" data-for="openhands">Not connected</div>
+                <button class="connector-connect-btn" data-for="openhands">Connect</button>
+                <button class="connector-settings-btn" data-for="openhands" title="Configure"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
             </div>
-            <div class="connector-body hidden" id="openhands-config">
-              <label>OpenHands URL</label>
-              <div class="token-row"><input type="text" id="openhands-conn-url" placeholder="http://10.0.0.22:3001"/><button class="test-btn" data-test="openhands">Test</button></div>
-              <div class="connector-result" id="openhands-result"></div>
-              <a class="open-link-btn" href="http://10.0.0.22:3001" target="_blank">Open OpenHands →</a>
-            </div>
-            <button class="connector-toggle" data-for="openhands">Configure ↓</button>
           </div>
 
           <!-- Home Assistant -->
           <div class="connector-card" data-connector="homeassistant">
             <div class="connector-header">
               <svg class="connector-icon" viewBox="0 0 24 24" fill="#41BDF5"><path d="M12 3L2 9v13h20V9L12 3zm0 2.3L20 10v10H4V10l8-4.7z"/><path d="M9 21v-6h6v6"/></svg>
-              <div><div class="connector-name">Home Assistant</div><div class="connector-desc">Control smart home, automate devices</div></div>
-              <div class="connector-status-pill" data-for="homeassistant">Not connected</div>
+              <div class="connector-info"><div class="connector-name">Home Assistant</div><div class="connector-desc">Control smart home, automate devices</div></div>
+              <div class="connector-actions">
+                <div class="connector-status-pill" data-for="homeassistant">Not connected</div>
+                <button class="connector-connect-btn" data-for="homeassistant">Connect</button>
+                <button class="connector-settings-btn" data-for="homeassistant" title="Configure"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
             </div>
-            <div class="connector-body hidden" id="homeassistant-config">
-              <label>Home Assistant URL</label>
-              <div class="token-row"><input type="text" id="homeassistant-url" placeholder="http://10.0.0.22:8123"/><button class="test-btn" data-test="homeassistant">Test</button></div>
-              <label>Long-Lived Access Token</label>
-              <input type="password" id="homeassistant-token" placeholder="eyJ..."/>
-              <p class="help-text">Generate in Home Assistant → Profile → Long-Lived Access Tokens</p>
-              <div class="connector-result" id="homeassistant-result"></div>
-            </div>
-            <button class="connector-toggle" data-for="homeassistant">Configure ↓</button>
           </div>
 
           <!-- Netdata -->
           <div class="connector-card" data-connector="netdata">
             <div class="connector-header">
               <svg class="connector-icon" viewBox="0 0 24 24" fill="#00AB44"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
-              <div><div class="connector-name">Netdata</div><div class="connector-desc">Server metrics, performance monitoring</div></div>
-              <div class="connector-status-pill" data-for="netdata">Not connected</div>
+              <div class="connector-info"><div class="connector-name">Netdata</div><div class="connector-desc">Server metrics, performance monitoring</div></div>
+              <div class="connector-actions">
+                <div class="connector-status-pill" data-for="netdata">Not connected</div>
+                <button class="connector-connect-btn" data-for="netdata">Connect</button>
+                <button class="connector-settings-btn" data-for="netdata" title="Configure"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              </div>
             </div>
-            <div class="connector-body hidden" id="netdata-config">
-              <label>Netdata URL</label>
-              <div class="token-row"><input type="text" id="netdata-url" placeholder="http://10.0.0.22:19999"/><button class="test-btn" data-test="netdata">Test</button></div>
-              <div class="connector-result" id="netdata-result"></div>
-              <a class="open-link-btn" href="http://10.0.0.22:19999" target="_blank">Open Netdata →</a>
-            </div>
-            <button class="connector-toggle" data-for="netdata">Configure ↓</button>
           </div>
 
         </div><!-- /connectors-grid -->
@@ -1088,6 +1074,105 @@
 
     </div><!-- /settings-content -->
   </div><!-- /settings-layout -->
+
+  <!-- ── CONNECTOR CONFIG MODAL ── -->
+  <div id="connector-modal" class="hidden">
+    <div class="cmodal-backdrop"></div>
+    <div class="cmodal-box">
+      <div class="cmodal-header">
+        <span id="cmodal-title">Configure</span>
+        <button id="cmodal-close">✕</button>
+      </div>
+      <div class="cmodal-body">
+
+        <div class="connector-cfg" id="cfg-github">
+          <label>Personal Access Token</label>
+          <div class="token-row"><input type="password" id="github-token" placeholder="ghp_xxxxxxxxxxxx"/><button class="test-btn" data-test="github">Test</button></div>
+          <p class="help-text">Generate at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a> — needs <code>repo</code>, <code>workflow</code> scopes</p>
+          <div class="connector-result" id="github-result"></div>
+        </div>
+
+        <div class="connector-cfg hidden" id="cfg-gmail">
+          <p class="help-text">Sign in with Google to let Lumen access Gmail, Drive, and Calendar. Your token is saved locally — nothing leaves your machine.</p>
+          <p class="help-text" style="margin-top:6px;color:var(--accent)">⚠ First add your email as a test user in <a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a> → APIs &amp; Services → OAuth consent screen → Test users.</p>
+          <button class="btn-primary" id="btn-connect-google" style="margin-top:10px;">Connect with Google</button>
+          <div id="google-connect-status" style="margin-top:8px;font-size:12px;color:var(--text-muted)"></div>
+        </div>
+
+        <div class="connector-cfg hidden" id="cfg-telegram">
+          <label>Bot Token</label>
+          <div class="token-row"><input type="password" id="telegram-token" placeholder="1234567890:ABCDef..."/><button class="test-btn" data-test="telegram">Test</button></div>
+          <label>Your Chat ID</label>
+          <input type="text" id="telegram-chatid" placeholder="123456789"/>
+          <p class="help-text">Message <strong>@BotFather</strong> on Telegram to create a bot and get your token.</p>
+          <div class="connector-result" id="telegram-result"></div>
+        </div>
+
+        <div class="connector-cfg hidden" id="cfg-obsidian">
+          <label>Local REST API URL</label>
+          <div class="token-row"><input type="text" id="obsidian-url" placeholder="http://127.0.0.1:27123"/><button class="test-btn" data-test="obsidian">Test</button></div>
+          <label>API Key (from plugin settings)</label>
+          <input type="password" id="obsidian-key" placeholder="your-api-key"/>
+          <label>Default Vault Folder</label>
+          <input type="text" id="obsidian-folder" placeholder="Lumen/"/>
+          <p class="help-text">Install the <strong>Local REST API</strong> community plugin in Obsidian first.</p>
+          <div class="connector-result" id="obsidian-result"></div>
+        </div>
+
+        <div class="connector-cfg hidden" id="cfg-n8n">
+          <label>n8n URL</label>
+          <div class="token-row"><input type="text" id="n8n-url" placeholder="http://10.0.0.22:5678"/><button class="test-btn" data-test="n8n">Test</button></div>
+          <label>API Key (Settings → API in n8n)</label>
+          <input type="password" id="n8n-key" placeholder="n8n_api_key..."/>
+          <div class="connector-result" id="n8n-result"></div>
+          <a class="open-link-btn" href="http://10.0.0.22:5678" target="_blank">Open n8n →</a>
+        </div>
+
+        <div class="connector-cfg hidden" id="cfg-flowise">
+          <label>Flowise URL</label>
+          <div class="token-row"><input type="text" id="flowise-url" placeholder="http://10.0.0.22:3002"/><button class="test-btn" data-test="flowise">Test</button></div>
+          <div class="connector-result" id="flowise-result"></div>
+          <a class="open-link-btn" href="http://10.0.0.22:3002" target="_blank">Open Flowise →</a>
+        </div>
+
+        <div class="connector-cfg hidden" id="cfg-skyvern">
+          <label>Skyvern API URL</label>
+          <div class="token-row"><input type="text" id="skyvern-url" placeholder="http://10.0.0.22:8000"/><button class="test-btn" data-test="skyvern">Test</button></div>
+          <label>API Key</label>
+          <input type="password" id="skyvern-key" placeholder="tower-skyvern-key"/>
+          <div class="connector-result" id="skyvern-result"></div>
+        </div>
+
+        <div class="connector-cfg hidden" id="cfg-openhands">
+          <label>OpenHands URL</label>
+          <div class="token-row"><input type="text" id="openhands-conn-url" placeholder="http://10.0.0.22:3001"/><button class="test-btn" data-test="openhands">Test</button></div>
+          <div class="connector-result" id="openhands-result"></div>
+          <a class="open-link-btn" href="http://10.0.0.22:3001" target="_blank">Open OpenHands →</a>
+        </div>
+
+        <div class="connector-cfg hidden" id="cfg-homeassistant">
+          <label>Home Assistant URL</label>
+          <div class="token-row"><input type="text" id="homeassistant-url" placeholder="http://10.0.0.22:8123"/><button class="test-btn" data-test="homeassistant">Test</button></div>
+          <label>Long-Lived Access Token</label>
+          <input type="password" id="homeassistant-token" placeholder="eyJ..."/>
+          <p class="help-text">Generate in Home Assistant → Profile → Long-Lived Access Tokens</p>
+          <div class="connector-result" id="homeassistant-result"></div>
+        </div>
+
+        <div class="connector-cfg hidden" id="cfg-netdata">
+          <label>Netdata URL</label>
+          <div class="token-row"><input type="text" id="netdata-url" placeholder="http://10.0.0.22:19999"/><button class="test-btn" data-test="netdata">Test</button></div>
+          <div class="connector-result" id="netdata-result"></div>
+          <a class="open-link-btn" href="http://10.0.0.22:19999" target="_blank">Open Netdata →</a>
+        </div>
+
+      </div><!-- /cmodal-body -->
+      <div class="cmodal-footer">
+        <button class="btn-secondary" id="cmodal-cancel">Close</button>
+        <button class="btn-primary" id="cmodal-save">Save &amp; Test</button>
+      </div>
+    </div>
+  </div><!-- /connector-modal -->
 
 </div><!-- /settings-panel -->
 

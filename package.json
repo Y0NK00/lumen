@@ -34,5 +34,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
+  },
+  "dependencies": {
+    "electron-oauth2": "^3.0.0",
+    "googleapis": "^171.4.0"
   }
 }
