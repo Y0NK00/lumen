@@ -436,10 +436,19 @@ function renderSidebar() {
     }
   }
   list.innerHTML = html;
-  list.querySelectorAll('.conv-item').forEach(el => el.addEventListener('click', ()=>loadConversation(el.dataset.id)));
-  list.querySelectorAll('.conv-project-btn').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); assignToProject(btn.dataset.id); }));
-  list.querySelectorAll('.conv-delete').forEach(btn => btn.addEventListener('click', e=>deleteConv(btn.dataset.id,e)));
-  list.querySelectorAll('.conv-title').forEach(el => el.addEventListener('dblclick', e => { e.stopPropagation(); startRenameConv(el.dataset.id, el); }));
+  // Use event delegation so listeners survive DOM rebuilds from loadConversation→renderSidebar
+  list.addEventListener('click', e => {
+    const del  = e.target.closest('.conv-delete');
+    const proj = e.target.closest('.conv-project-btn');
+    const item = e.target.closest('.conv-item');
+    if (del)  { deleteConv(del.dataset.id, e); return; }
+    if (proj) { e.stopPropagation(); assignToProject(proj.dataset.id); return; }
+    if (item && e.detail < 2) loadConversation(item.dataset.id);
+  });
+  list.addEventListener('dblclick', e => {
+    const title = e.target.closest('.conv-title');
+    if (title) { e.stopPropagation(); startRenameConv(title.dataset.id, title); }
+  });
 }
 
 function startRenameConv(id, titleEl) {
@@ -2033,7 +2042,7 @@ function showNewProjectInput() {
   if (!row || !input) return;
   row.classList.remove('hidden');
   input.value = '';
-  input.focus();
+  setTimeout(() => input.focus(), 50);
 }
 function hideNewProjectInput() {
   const row = document.getElementById('new-project-input-row');
@@ -2249,8 +2258,8 @@ function bindEvents() {
   document.getElementById('chat-search-input').addEventListener('input', e => filterSidebar(e.target.value));
   document.getElementById('chat-search-input').addEventListener('keydown', e => { if (e.key === 'Escape') toggleChatSearch(); });
 
-  // New project button
-  document.getElementById('btn-new-project').addEventListener('click', newProject);
+  // New project button (single binding only — duplicate removed)
+  document.getElementById('btn-new-project').addEventListener('click', showNewProjectInput);
 
   // Chat input
   const chatIn = document.getElementById('chat-input');
@@ -2486,8 +2495,7 @@ function bindEvents() {
     window.speechSynthesis.onvoiceschanged = populateVoicePicker;
   }
 
-  // ── NEW PROJECT inline input ──
-  document.getElementById('btn-new-project').addEventListener('click', showNewProjectInput);
+  // ── NEW PROJECT inline input ── (btn binding is in bindEvents above)
   document.getElementById('new-project-confirm').addEventListener('click', confirmNewProject);
   document.getElementById('new-project-cancel').addEventListener('click', hideNewProjectInput);
   document.getElementById('new-project-input').addEventListener('keydown', e => {
