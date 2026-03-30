@@ -9,3 +9,5 @@ userData/
 oauth.config.json
 
 inject-keys.ps1
+
+.claude/
