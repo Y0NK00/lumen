@@ -436,19 +436,7 @@ function renderSidebar() {
     }
   }
   list.innerHTML = html;
-  // Use event delegation so listeners survive DOM rebuilds from loadConversation→renderSidebar
-  list.addEventListener('click', e => {
-    const del  = e.target.closest('.conv-delete');
-    const proj = e.target.closest('.conv-project-btn');
-    const item = e.target.closest('.conv-item');
-    if (del)  { deleteConv(del.dataset.id, e); return; }
-    if (proj) { e.stopPropagation(); assignToProject(proj.dataset.id); return; }
-    if (item && e.detail < 2) loadConversation(item.dataset.id);
-  });
-  list.addEventListener('dblclick', e => {
-    const title = e.target.closest('.conv-title');
-    if (title) { e.stopPropagation(); startRenameConv(title.dataset.id, title); }
-  });
+  // Listeners are set up once in bindEvents() via event delegation — do not add here
 }
 
 function startRenameConv(id, titleEl) {
@@ -2260,6 +2248,21 @@ function bindEvents() {
 
   // New project button (single binding only — duplicate removed)
   document.getElementById('btn-new-project').addEventListener('click', showNewProjectInput);
+
+  // Conversation list — single delegated listeners set up once here, not inside renderSidebar
+  const convList = document.getElementById('conversations-list');
+  convList.addEventListener('click', e => {
+    const del  = e.target.closest('.conv-delete');
+    const proj = e.target.closest('.conv-project-btn');
+    const item = e.target.closest('.conv-item');
+    if (del)  { deleteConv(del.dataset.id, e); return; }
+    if (proj) { assignToProject(proj.dataset.id); return; }
+    if (item && e.detail < 2) loadConversation(item.dataset.id);
+  });
+  convList.addEventListener('dblclick', e => {
+    const title = e.target.closest('.conv-title');
+    if (title) { e.stopPropagation(); startRenameConv(title.dataset.id, title); }
+  });
 
   // Chat input
   const chatIn = document.getElementById('chat-input');
