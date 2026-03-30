@@ -38,4 +38,15 @@ contextBridge.exposeInMainWorld('tower', {
     onLoaded:  (cb)     => ipcRenderer.on('driver:loaded', cb),
     onFailed:  (cb)     => ipcRenderer.on('driver:failed', cb),
   },
+
+  // OpenHands (Code Bot) BrowserView
+  code: {
+    init:      (url)    => ipcRenderer.invoke('code:init', { url }),
+    show:      (bounds) => ipcRenderer.invoke('code:show', bounds),
+    hide:      ()       => ipcRenderer.invoke('code:hide'),
+    setBounds: (bounds) => ipcRenderer.invoke('code:setBounds', bounds),
+    reload:    ()       => ipcRenderer.invoke('code:reload'),
+    onLoaded:  (cb)     => ipcRenderer.on('code:loaded', cb),
+    onFailed:  (cb)     => ipcRenderer.on('code:failed', cb),
+  },
 });

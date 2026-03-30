@@ -7,6 +7,8 @@ const { google } = require('googleapis');
 let mainWindow;
 let driverView = null;
 let driverViewAttached = false;
+let codeView = null;
+let codeViewAttached = false;
 const userDataPath = app.getPath('userData');
 const conversationsFile = path.join(userDataPath, 'conversations.json');
 const settingsFile      = path.join(userDataPath, 'settings.json');
@@ -218,3 +220,42 @@ ipcMain.handle('driver:setBounds', (_, bounds) => {
 
 ipcMain.handle('driver:reload', () => { driverView?.webContents.reload(); });
 ipcMain.handle('driver:navigate', (_, url) => { driverView?.webContents.loadURL(url); });
+
+// ── OpenHands (Code Bot) BrowserView ──
+ipcMain.handle('code:init', (_, { url }) => {
+  if (!codeView) {
+    codeView = new BrowserView({
+      webPreferences: { nodeIntegration: false, contextIsolation: true, webSecurity: false },
+    });
+    codeView.webContents.on('did-finish-load', () => {
+      mainWindow?.webContents.send('code:loaded');
+    });
+    codeView.webContents.on('did-fail-load', (_, errCode) => {
+      if (errCode !== -3) mainWindow?.webContents.send('code:failed');
+    });
+  }
+  codeView.webContents.loadURL(url);
+  return true;
+});
+
+ipcMain.handle('code:show', (_, bounds) => {
+  if (!codeView) return;
+  if (!codeViewAttached) {
+    mainWindow.addBrowserView(codeView);
+    codeViewAttached = true;
+  }
+  codeView.setBounds(driverBounds(bounds));
+});
+
+ipcMain.handle('code:hide', () => {
+  if (codeView && codeViewAttached) {
+    mainWindow.removeBrowserView(codeView);
+    codeViewAttached = false;
+  }
+});
+
+ipcMain.handle('code:setBounds', (_, bounds) => {
+  if (codeView && codeViewAttached) codeView.setBounds(driverBounds(bounds));
+});
+
+ipcMain.handle('code:reload', () => { codeView?.webContents.reload(); });

@@ -327,10 +327,9 @@
             </div>
           </div>
 
-          <!-- OpenHands view (webview stays loaded always) -->
+          <!-- OpenHands view (BrowserView managed by main process) -->
           <div id="codetab-openhands" class="code-panel">
-            <div class="webview-container">
-              <webview id="webview-code" src="about:blank" allowpopups partition="persist:code"></webview>
+            <div class="webview-container" id="code-webview-wrap">
               <div class="embed-overlay" id="code-overlay">
                 <div class="spinner"></div>
                 <p>Loading OpenHands…</p>

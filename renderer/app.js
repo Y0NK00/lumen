@@ -93,6 +93,7 @@ async function init() {
   // Re-size webviews whenever the window is resized
   window.addEventListener('resize', () => {
     if (state.mode === 'driver') updateDriverBounds();
+    if (state.mode === 'code' && state.codeTab === 'openhands') updateCodeBounds();
     if (state.mode === 'chrome') forceResizeWebview('webview-chrome', 'chrome-webview-wrap');
   });
 }
@@ -154,10 +155,14 @@ function switchMode(mode) {
   document.querySelectorAll('.top-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === `panel-${mode}`));
 
-  // BrowserView: hide when leaving driver, show/init when entering driver
+  // BrowserView: hide when leaving, show/init when entering
   if (prev === 'driver') window.tower.driver.hide();
+  if (prev === 'code' && state.codeTab === 'openhands') window.tower.code.hide();
   if (mode === 'driver') {
     requestAnimationFrame(() => requestAnimationFrame(() => initDriverView()));
+  }
+  if (mode === 'code' && state.codeTab === 'openhands') {
+    requestAnimationFrame(() => requestAnimationFrame(() => initCodeView()));
   }
   if (mode === 'chrome') forceResizeWebview('webview-chrome', 'chrome-webview-wrap');
 
@@ -173,10 +178,19 @@ function switchMode(mode) {
 }
 
 function switchCodeTab(tab) {
+  const prevTab = state.codeTab;
   state.codeTab = tab;
   document.querySelectorAll('.code-tab').forEach(b => b.classList.toggle('active', b.dataset.codetab === tab));
   document.querySelectorAll('.code-panel').forEach(p => p.classList.toggle('active', p.id === `codetab-${tab}`));
   if (tab === 'terminal') setTimeout(() => document.getElementById('terminal-input').focus(), 50);
+
+  // BrowserView show/hide for OpenHands
+  if (state.mode === 'code') {
+    if (prevTab === 'openhands' && tab !== 'openhands') window.tower.code.hide();
+    if (tab === 'openhands') {
+      requestAnimationFrame(() => requestAnimationFrame(() => initCodeView()));
+    }
+  }
 }
 
 // ── WEBVIEW INIT ─────────────────────────────
@@ -195,8 +209,9 @@ function getDriverOverlayHTML() {
   </div>`;
 }
 
-// driverState: 'idle' | 'loading' | 'ready' | 'error'
+// driverState / codeState: 'idle' | 'loading' | 'ready' | 'error'
 let driverState = 'idle';
+let codeState   = 'idle';
 
 function updateDriverBounds() {
   if (driverState !== 'ready') return;
@@ -206,6 +221,36 @@ function updateDriverBounds() {
   if (r.width > 10 && r.height > 10) {
     window.tower.driver.setBounds({ x: r.left, y: r.top, width: r.width, height: r.height });
   }
+}
+
+function updateCodeBounds() {
+  if (codeState !== 'ready') return;
+  const wrap = document.getElementById('code-webview-wrap');
+  if (!wrap) return;
+  const r = wrap.getBoundingClientRect();
+  if (r.width > 10 && r.height > 10) {
+    window.tower.code.setBounds({ x: r.left, y: r.top, width: r.width, height: r.height });
+  }
+}
+
+async function initCodeView() {
+  const codeOverlay = document.getElementById('code-overlay');
+
+  if (codeState === 'ready') {
+    const wrap = document.getElementById('code-webview-wrap');
+    const r = wrap.getBoundingClientRect();
+    window.tower.code.show({ x: r.left, y: r.top, width: r.width, height: r.height });
+    codeOverlay.classList.add('hidden');
+    return;
+  }
+
+  if (codeState === 'loading') return;
+
+  codeState = 'loading';
+  codeOverlay.innerHTML = `<div class="spinner"></div><p>Connecting to OpenHands…</p>`;
+  codeOverlay.classList.remove('hidden');
+
+  await window.tower.code.init(state.settings.openhandsUrl);
 }
 
 async function initDriverView() {
@@ -256,11 +301,10 @@ async function initWebviews() {
   if (state.webviewsLoaded) return;
   state.webviewsLoaded = true;
 
-  const wvCode       = document.getElementById('webview-code');
-  const codeOverlay  = document.getElementById('code-overlay');
   const driverOverlay = document.getElementById('driver-overlay');
+  const codeOverlay   = document.getElementById('code-overlay');
 
-  // Wire up BrowserView events (register once)
+  // ── Driver BrowserView events (register once) ──
   window.tower.driver.onLoaded(() => {
     driverState = 'ready';
     driverOverlay.classList.add('hidden');
@@ -280,7 +324,6 @@ async function initWebviews() {
     });
   });
 
-  // Toolbar buttons
   document.getElementById('driver-reload').addEventListener('click', () => {
     if (driverState === 'ready') {
       driverOverlay.innerHTML = `<div class="spinner"></div><p>Reloading…</p>`;
@@ -294,7 +337,6 @@ async function initWebviews() {
   });
   document.getElementById('driver-popout').addEventListener('click', () => window.open(state.settings.skyvernUrl));
 
-  // Copy overlay command buttons
   document.querySelectorAll('.copy-overlay-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       navigator.clipboard.writeText(btn.dataset.copy);
@@ -303,11 +345,20 @@ async function initWebviews() {
     });
   });
 
-  // Load code bot (still uses <webview>)
-  wvCode.src = state.settings.openhandsUrl;
-  wvCode.addEventListener('did-finish-load', () => { codeOverlay.classList.add('hidden'); });
-  wvCode.addEventListener('did-fail-load', () => {
+  // ── Code (OpenHands) BrowserView events (register once) ──
+  window.tower.code.onLoaded(() => {
+    codeState = 'ready';
+    codeOverlay.classList.add('hidden');
+    if (state.mode === 'code' && state.codeTab === 'openhands') {
+      const wrap = document.getElementById('code-webview-wrap');
+      const r = wrap.getBoundingClientRect();
+      window.tower.code.show({ x: r.left, y: r.top, width: r.width, height: r.height });
+    }
+  });
+  window.tower.code.onFailed(() => {
+    codeState = 'error';
     codeOverlay.innerHTML = `<p style="color:var(--text-muted);font-size:13px;">Could not connect to OpenHands at<br><code style="background:var(--bg-hover);padding:2px 6px;border-radius:4px;">${state.settings.openhandsUrl}</code><br><br>Check Settings to verify the URL.</p>`;
+    codeOverlay.classList.remove('hidden');
   });
 }
 
