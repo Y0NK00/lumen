@@ -427,7 +427,7 @@ function renderSidebar() {
     for (const c of convs) {
       html += `
         <div class="conv-item ${c.id===state.currentId?'active':''}" data-id="${c.id}">
-          <span class="conv-title">${esc(c.title)}</span>
+          <span class="conv-title" data-id="${c.id}" title="Double-click to rename">${esc(c.title)}</span>
           <div class="conv-actions">
             <button class="conv-project-btn" data-id="${c.id}" title="Add to project">📁</button>
             <button class="conv-delete" data-id="${c.id}" title="Delete">✕</button>
@@ -439,6 +439,32 @@ function renderSidebar() {
   list.querySelectorAll('.conv-item').forEach(el => el.addEventListener('click', ()=>loadConversation(el.dataset.id)));
   list.querySelectorAll('.conv-project-btn').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); assignToProject(btn.dataset.id); }));
   list.querySelectorAll('.conv-delete').forEach(btn => btn.addEventListener('click', e=>deleteConv(btn.dataset.id,e)));
+  list.querySelectorAll('.conv-title').forEach(el => el.addEventListener('dblclick', e => { e.stopPropagation(); startRenameConv(el.dataset.id, el); }));
+}
+
+function startRenameConv(id, titleEl) {
+  const conv = state.conversations.find(c => c.id === id);
+  if (!conv) return;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = conv.title;
+  input.className = 'conv-rename-input';
+  titleEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  const commit = () => {
+    const newTitle = input.value.trim() || conv.title;
+    conv.title = newTitle;
+    save();
+    renderSidebar();
+  };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = conv.title; input.blur(); }
+  });
 }
 
 // ── CHAT RENDER ──────────────────────────────
