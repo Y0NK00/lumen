@@ -7,3 +7,5 @@ userData/
 *.env
 .env
 oauth.config.json
+
+inject-keys.ps1
