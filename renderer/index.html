@@ -353,9 +353,16 @@
             <span id="code-status-dot" class="status-dot idle"></span>
             <span id="code-status-text">Ready</span>
             <select id="code-model-select" title="Model for Code Bot">
-              <option value="qwen2.5-coder:14b">Qwen Coder 14B</option>
-              <option value="qwen2.5:14b">Qwen 2.5 14B</option>
-              <option value="qwen2.5:32b">Qwen 2.5 32B</option>
+              <optgroup label="Local (Ollama)">
+                <option value="qwen2.5-coder:14b">Qwen Coder 14B</option>
+                <option value="qwen2.5:14b">Qwen 2.5 14B</option>
+                <option value="qwen2.5:32b">Qwen 2.5 32B</option>
+              </optgroup>
+              <optgroup label="Claude (Anthropic)">
+                <option value="ant:claude-haiku-4-5-20251001">Claude Haiku 4.5 · $0.25/1M</option>
+                <option value="ant:claude-sonnet-4-6">Claude Sonnet 4.6 · $3/1M</option>
+                <option value="ant:claude-opus-4-6">Claude Opus 4.6 · $5/1M</option>
+              </optgroup>
             </select>
           </div>
         </div>
