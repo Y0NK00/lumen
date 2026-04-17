@@ -1,0 +1,22 @@
+﻿@import "tailwindcss";
+
+@theme {
+  --color-lumen-bg: #09090b;
+  --color-lumen-surface: #18181b;
+  --color-lumen-border: #27272a;
+  --color-lumen-text: #fafafa;
+  --color-lumen-muted: #71717a;
+  --color-lumen-accent: #3b82f6;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background: var(--color-lumen-bg);
+  color: var(--color-lumen-text);
+  -webkit-font-smoothing: antialiased;
+}

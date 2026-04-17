@@ -22,8 +22,8 @@ function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
 }
 
-// OAuth credentials â€” loaded from oauth.config.json (gitignored, never committed)
-// Copy oauth.config.example.json â†’ oauth.config.json and fill in your credentials.
+// OAuth credentials — loaded from oauth.config.json (gitignored, never committed)
+// Copy oauth.config.example.json → oauth.config.json and fill in your credentials.
 let OAUTH_CONFIG = {
   google: {
     clientId: '',
@@ -39,11 +39,11 @@ try {
   const loaded = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
   if (loaded.google) OAUTH_CONFIG.google = { ...OAUTH_CONFIG.google, ...loaded.google };
 } catch {
-  // oauth.config.json not present â€” Google OAuth will be disabled until configured
+  // oauth.config.json not present — Google OAuth will be disabled until configured
 }
 
-// â”€â”€ Google OAuth helpers â”€â”€
-const OAUTH_PORT = 9741; // Local callback port â€” must be in your Google Cloud Console authorized redirect URIs
+// ── Google OAuth helpers ──
+const OAUTH_PORT = 9741; // Local callback port — must be in your Google Cloud Console authorized redirect URIs
 
 async function connectGoogle(mainWin) {
   const http = require('http');
@@ -73,7 +73,7 @@ async function connectGoogle(mainWin) {
         // Show a friendly success page in the browser
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end(`<html><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f0f0f;color:#fff">
-          <div style="text-align:center"><div style="font-size:48px">âœ…</div><h2>Connected to Google!</h2><p style="color:#888">You can close this tab and return to Lumen.</p></div>
+          <div style="text-align:center"><div style="font-size:48px">✅</div><h2>Connected to Google!</h2><p style="color:#888">You can close this tab and return to Lumen.</p></div>
         </body></html>`);
 
         cleanup();
@@ -91,7 +91,7 @@ async function connectGoogle(mainWin) {
     server.on('error', (e) => reject(new Error(`Port ${OAUTH_PORT} busy: ${e.message}`)));
 
     server.listen(OAUTH_PORT, 'localhost', () => {
-      // Open in the user's default browser â€” avoids Electron webview quirks
+      // Open in the user's default browser — avoids Electron webview quirks
       shell.openExternal(authUrl);
     });
 
@@ -117,27 +117,8 @@ function createWindow() {
     },
   });
 
-  const IS_V2 = process.env.LUMEN_V2 === 'true';
+  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
-  const IS_DEV = !app.isPackaged;
-
-  
-
-  if (IS_V2 && IS_DEV) {
-
-    mainWindow.loadURL('http://localhost:5173');
-
-    mainWindow.webContents.openDevTools();
-
-  } else if (IS_V2) {
-
-    mainWindow.loadFile(path.join(__dirname, 'dist', 'renderer', 'index.html'));
-
-  } else {
-
-    mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-
-  }
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
@@ -148,12 +129,12 @@ app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 
-// â”€â”€ Window controls â”€â”€
+// ── Window controls ──
 ipcMain.on('win:minimize', () => mainWindow?.minimize());
 ipcMain.on('win:maximize', () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow?.maximize());
 ipcMain.on('win:close',    () => mainWindow?.close());
 
-// â”€â”€ Data persistence â”€â”€
+// ── Data persistence ──
 ipcMain.handle('data:loadConversations', () => readJSON(conversationsFile, []));
 ipcMain.handle('data:saveConversations', (_, v) => { writeJSON(conversationsFile, v); return true; });
 ipcMain.handle('data:loadSettings',      () => readJSON(settingsFile, null));
@@ -161,13 +142,13 @@ ipcMain.handle('data:saveSettings',      (_, v) => { writeJSON(settingsFile, v);
 ipcMain.handle('data:loadConnectors',    () => readJSON(connectorsFile, {}));
 ipcMain.handle('data:saveConnectors',    (_, v) => { writeJSON(connectorsFile, v); return true; });
 
-// â”€â”€ Google OAuth â”€â”€
+// ── Google OAuth ──
 ipcMain.handle('connect-google', async () => {
   await connectGoogle(mainWindow);
   return { success: true };
 });
 
-// â”€â”€ Terminal command execution â”€â”€
+// ── Terminal command execution ──
 ipcMain.handle('terminal:run', async (_, cmd) => {
   return new Promise((resolve) => {
     exec(cmd, { timeout: 60000, maxBuffer: 1024 * 1024 * 10 }, (err, stdout, stderr) => {
@@ -176,7 +157,7 @@ ipcMain.handle('terminal:run', async (_, cmd) => {
   });
 });
 
-// â”€â”€ File system helpers for Code Bot â”€â”€
+// ── File system helpers for Code Bot ──
 ipcMain.handle('fs:readFile',  (_, filePath) => {
   try { return { content: fs.readFileSync(filePath, 'utf8'), error: null }; }
   catch (e) { return { content: null, error: e.message }; }
@@ -192,7 +173,7 @@ ipcMain.handle('fs:listDir', (_, dirPath) => {
   } catch (e) { return { items: [], error: e.message }; }
 });
 
-// â”€â”€ AI Driver BrowserView â”€â”€
+// ── AI Driver BrowserView ──
 // BrowserView is main-process managed with explicit pixel bounds, avoiding the
 // <webview> guest renderer viewport bug where 0px at first-load permanently
 // freezes the viewport at ~150px regardless of later CSS changes.
@@ -240,7 +221,7 @@ ipcMain.handle('driver:setBounds', (_, bounds) => {
 ipcMain.handle('driver:reload', () => { driverView?.webContents.reload(); });
 ipcMain.handle('driver:navigate', (_, url) => { driverView?.webContents.loadURL(url); });
 
-// â”€â”€ OpenHands (Code Bot) BrowserView â”€â”€
+// ── OpenHands (Code Bot) BrowserView ──
 ipcMain.handle('code:init', (_, { url }) => {
   if (!codeView) {
     codeView = new BrowserView({
