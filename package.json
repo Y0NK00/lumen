@@ -1,47 +1,63 @@
 {
-    "name":  "lumen",
-    "version":  "1.0.0",
-    "description":  "Lumen Ã¢â‚¬â€ Your private AI companion, running entirely on your own hardware.",
-    "main":  "main.js",
-    "scripts":  {
-                    "start":  "electron .",
-                    "build":  "electron-builder --win",
-                    "dev:vite":  "vite",
-                    "build:vite":  "vite build",
-                    "type-check":  "tsc --noEmit",
-                    "dev:electron:v2":  "wait-on tcp:5173 \u0026\u0026 cross-env LUMEN_V2=true electron .",
-                    "dev:v2":  "concurrently -k \"npm:dev:vite\" \"npm:dev:electron:v2\""
-                },
-    "devDependencies":  {
-                            "electron":  "^28.3.3",
-                            "electron-builder":  "^24.13.3"
-                        },
-    "build":  {
-                  "appId":  "com.lumen.ai",
-                  "productName":  "Lumen",
-                  "directories":  {
-                                      "output":  "dist"
-                                  },
-                  "win":  {
-                              "target":  [
-                                             {
-                                                 "target":  "nsis",
-                                                 "arch":  [
-                                                              "x64"
-                                                          ]
-                                             }
-                                         ],
-                              "icon":  "assets/icon.ico"
-                          },
-                  "nsis":  {
-                               "oneClick":  false,
-                               "allowToChangeInstallationDirectory":  true,
-                               "createDesktopShortcut":  true,
-                               "createStartMenuShortcut":  true
-                           }
-              },
-    "dependencies":  {
-                         "electron-oauth2":  "^3.0.0",
-                         "googleapis":  "^171.4.0"
-                     }
+    "name": "lumen",
+    "version": "1.0.0",
+    "description": "Lumen Ã¢â‚¬â€ Your private AI companion, running entirely on your own hardware.",
+    "main": "main.js",
+    "scripts": {
+        "start": "electron .",
+        "build": "electron-builder --win",
+        "dev:vite": "vite",
+        "build:vite": "vite build",
+        "type-check": "tsc --noEmit",
+        "dev:electron:v2": "wait-on tcp:5173 && cross-env LUMEN_V2=true electron .",
+        "dev:v2": "concurrently -k \"npm:dev:vite\" \"npm:dev:electron:v2\""
+    },
+    "devDependencies": {
+        "@tailwindcss/vite": "^4.2.2",
+        "@types/react": "^19.2.14",
+        "@types/react-dom": "^19.2.3",
+        "@types/react-syntax-highlighter": "^15.5.13",
+        "@vitejs/plugin-react": "^6.0.1",
+        "concurrently": "^9.2.1",
+        "cross-env": "^10.1.0",
+        "electron": "^28.3.3",
+        "electron-builder": "^24.13.3",
+        "typescript": "^6.0.3",
+        "vite": "^8.0.8",
+        "wait-on": "^9.0.5"
+    },
+    "build": {
+        "appId": "com.lumen.ai",
+        "productName": "Lumen",
+        "directories": {
+            "output": "dist"
+        },
+        "win": {
+            "target": [
+                {
+                    "target": "nsis",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
+            "icon": "assets/icon.ico"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true
+        }
+    },
+    "dependencies": {
+        "electron-oauth2": "^3.0.0",
+        "googleapis": "^171.4.0",
+        "react": "^19.2.5",
+        "react-dom": "^19.2.5",
+        "react-markdown": "^10.1.0",
+        "react-syntax-highlighter": "^16.1.1",
+        "remark-gfm": "^4.0.1",
+        "zustand": "^5.0.12"
+    }
 }
