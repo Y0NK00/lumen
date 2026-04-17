@@ -144,6 +144,151 @@ function createWindow() {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 3 ADDITIONS — paste these into your existing main.js / main.ts
+//
+// Where to add them:
+//   1. At the top of the file, add the require/import:
+//      const { ipcMain } = require('electron')
+//      (it's probably already imported — just add ipcMain to the destructure)
+//
+//   2. Paste the block below BEFORE the `app.whenReady()` call, but AFTER
+//      all your `require()` / `import` statements.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Keep AbortControllers so the renderer can cancel mid-stream.
+const claudeStreams = new Map()
+
+ipcMain.on('claude-stream-start', async (event, { requestId, messages, model, apiKey }) => {
+  const controller = new AbortController()
+  claudeStreams.set(requestId, controller)
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        // Required when streaming
+        'accept': 'text/event-stream',
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        max_tokens: 4096,
+        stream: true,
+      }),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      event.sender.send('claude-error', {
+        requestId,
+        message: `Claude API ${response.status}: ${errorText}`,
+      })
+      return
+    }
+
+    if (!response.body) {
+      event.sender.send('claude-error', { requestId, message: 'No response body' })
+      return
+    }
+
+    // ── Read the SSE stream ──────────────────────────────────────────────────
+    // Claude sends Server-Sent Events (SSE), NOT plain NDJSON like Ollama.
+    // Each event looks like:
+    //   event: content_block_delta
+    //   data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}
+    //
+    // We only care about text_delta events. Everything else we skip.
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+
+      // Split on double-newline — SSE events are separated by blank lines.
+      // But also handle single-newline data lines within events.
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+
+        // Skip blank lines and "event:" type lines — we only care about "data:"
+        if (!trimmed || trimmed.startsWith('event:')) continue
+
+        // Skip the stream terminator
+        if (trimmed === 'data: [DONE]') continue
+
+        if (trimmed.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(trimmed.slice(6))
+
+            if (
+              data.type === 'content_block_delta' &&
+              data.delta?.type === 'text_delta'
+            ) {
+              event.sender.send('claude-chunk', {
+                requestId,
+                text: data.delta.text,
+              })
+            }
+
+            if (data.type === 'message_stop') {
+              event.sender.send('claude-done', { requestId })
+              claudeStreams.delete(requestId)
+              return
+            }
+
+            // Surface API-level errors embedded in the stream
+            if (data.type === 'error') {
+              event.sender.send('claude-error', {
+                requestId,
+                message: data.error?.message ?? 'Unknown API error',
+              })
+              claudeStreams.delete(requestId)
+              return
+            }
+          } catch {
+            // Malformed JSON in stream line — skip and continue
+          }
+        }
+      }
+    }
+
+    // Stream ended without message_stop — treat as done
+    event.sender.send('claude-done', { requestId })
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      // User deliberately cancelled — send done so renderer cleans up
+      event.sender.send('claude-done', { requestId })
+    } else {
+      event.sender.send('claude-error', {
+        requestId,
+        message: err.message ?? 'Unknown error',
+      })
+    }
+  } finally {
+    claudeStreams.delete(requestId)
+  }
+})
+
+ipcMain.on('claude-stream-abort', (event, { requestId }) => {
+  const controller = claudeStreams.get(requestId)
+  if (controller) {
+    controller.abort()
+    claudeStreams.delete(requestId)
+  }
+})
+
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
