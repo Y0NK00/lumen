@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Lumen WebSocket Bridge</title>
+  </head>
+  <body>
+    <!--
+      This offscreen document exists purely to maintain a persistent WebSocket
+      connection to Lumen's local server (ws://localhost:7745).
+
+      Offscreen documents don't have the 30-second dormancy limit that
+      MV3 service workers do, so the WebSocket stays alive here.
+
+      This page is never visible to the user.
+    -->
+    <script src="offscreen.js"></script>
+  </body>
+</html>

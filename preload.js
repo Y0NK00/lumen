@@ -53,6 +53,20 @@ contextBridge.exposeInMainWorld('tower', {
     ipcRenderer.on('claude-error', handler)
     return () => ipcRenderer.removeListener('claude-error', handler)
   },
+    onClaudeToolStart: (callback) => {
+    // Payload: { requestId: string, toolId: string, toolName: string }
+    const handler = (_, data) => callback(data)
+    ipcRenderer.on('claude-tool-start', handler)
+    return () => ipcRenderer.removeListener('claude-tool-start', handler)
+  },
+
+  onClaudeToolResult: (callback) => {
+    // Payload: { requestId, toolId, toolName, input, result, success }
+    const handler = (_, data) => callback(data)
+    ipcRenderer.on('claude-tool-result', handler)
+    return () => ipcRenderer.removeListener('claude-tool-result', handler)
+  },
+
 
   // ── AI Driver BrowserView ──────────────────────────────────────────────────
   driver: {

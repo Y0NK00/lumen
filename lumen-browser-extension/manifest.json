@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Lumen Browser",
+  "version": "1.0.0",
+  "description": "Connects your Chrome browser to Lumen AI. Allows Claude to read pages, click, type, and take screenshots using your existing sessions.",
+
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "scripting",
+    "offscreen",
+    "storage",
+    "alarms"
+  ],
+
+  "host_permissions": [
+    "<all_urls>"
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "action": {
+    "default_title": "Lumen Browser",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src ws://tower.local:7745 ws://localhost:7745"
+  }
+}

@@ -14,9 +14,11 @@
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.2.2",
+        "@types/diff": "^7.0.2",
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.3",
         "@types/react-syntax-highlighter": "^15.5.13",
+        "@types/ws": "^8.18.1",
         "@vitejs/plugin-react": "^6.0.1",
         "concurrently": "^9.2.1",
         "cross-env": "^10.1.0",
@@ -51,6 +53,7 @@
         }
     },
     "dependencies": {
+        "diff": "^9.0.0",
         "electron-oauth2": "^3.0.0",
         "googleapis": "^171.4.0",
         "react": "^19.2.5",
@@ -58,6 +61,7 @@
         "react-markdown": "^10.1.0",
         "react-syntax-highlighter": "^16.1.1",
         "remark-gfm": "^4.0.1",
+        "ws": "^8.20.0",
         "zustand": "^5.0.12"
     }
 }
