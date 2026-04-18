@@ -5,6 +5,8 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import type { Message } from '../stores/chatStore'
 import { ToolCallCard } from './ToolCallCard'
+import { MarkdownRenderer } from './MarkdownRenderer';
+import { ThinkingBlock, extractThinkingFromMessage } from './ThinkingBlock';
 
 // =============================================================================
 // PHASE 4 CHANGES vs Phase 2:
@@ -81,9 +83,10 @@ function CopyButton({ text }: { text: string }) {
 
 interface MessageBubbleProps {
   message: Message
+  onOpenInArtifacts: (code: string, language: string) => void; // ADD
 }
 
-function MessageBubble({ message }: MessageBubbleProps) {
+function MessageBubble({ message, onOpenInArtifacts }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const isEmpty = !message.content && message.isStreaming && !message.toolCalls?.length
 
@@ -121,29 +124,18 @@ function MessageBubble({ message }: MessageBubbleProps) {
             {/* Text content (may be empty if Claude went straight to tool use) */}
             {message.content && (
               <>
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    code: CodeBlock as any,
-                    a: ({ children, href }) => (
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-accent hover:underline"
-                      >
-                        {children}
-                      </a>
-                    ),
-                    blockquote: ({ children }) => (
-                      <blockquote className="border-l-2 border-border pl-3 text-text-secondary italic">
-                        {children}
-                      </blockquote>
-                    ),
-                  }}
-                >
-                  {message.content}
-                </ReactMarkdown>
+                {(() => {
+                     const { thinking, mainContent } = extractThinkingFromMessage(message.content);
+                     return (
+                      <>
+                         {thinking && <ThinkingBlock content={thinking} />}
+                         <MarkdownRenderer
+                         content={mainContent}
+                         onOpenInArtifacts={onOpenInArtifacts}
+                      />
+                     </>
+                     );
+                })()}
                 {/* Blinking cursor while streaming and no tool calls are running */}
                 {message.isStreaming && !message.toolCalls?.some((tc) => tc.status === 'running') && (
                   <span className="streaming-cursor" aria-hidden />
@@ -187,9 +179,10 @@ function ThinkingIndicator() {
 
 interface MessageListProps {
   messages: Message[]
+    onOpenInArtifacts: (code: string, language: string) => void;
 }
 
-export function MessageList({ messages }: MessageListProps) {
+export function MessageList({ messages, onOpenInArtifacts }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const userScrolledUpRef = useRef(false)
@@ -232,7 +225,7 @@ export function MessageList({ messages }: MessageListProps) {
       className="flex-1 overflow-y-auto px-6 py-6"
     >
       {messages.map((message) => (
-        <MessageBubble key={message.id} message={message} />
+        <MessageBubble key={message.id} message={message} onOpenInArtifacts={onOpenInArtifacts} />
       ))}
       <div ref={bottomRef} />
     </div>

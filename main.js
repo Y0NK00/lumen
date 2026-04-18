@@ -367,6 +367,71 @@ const CLAUDE_TOOLS = [
       required: ['selector', 'text'],
     },
   },
+
+  // ── Code Mode tools (Phase 6) ──────────────────────────────────────────────
+  {
+    name: 'execute_bash',
+    description: 'Execute a shell command and return stdout/stderr. Use for running scripts, git commands, npm, checking system state. Avoid commands needing interactive input.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'The shell command to run.' },
+        working_dir: { type: 'string', description: 'Directory to run in. Defaults to process cwd.' },
+        timeout_ms: { type: 'number', description: 'Timeout in ms. Default 30000, max 120000.' },
+      },
+      required: ['command'],
+    },
+  },
+  {
+    name: 'grep_files',
+    description: 'Search files for a regex pattern. Returns matching lines with file:line context. Use to find where things are defined or used across a codebase.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        pattern: { type: 'string', description: 'Regex pattern to search for.' },
+        path: { type: 'string', description: 'Directory or file to search. Defaults to cwd.' },
+        glob_pattern: { type: 'string', description: 'File filter e.g. "*.ts" or "src/**/*.tsx".' },
+        case_sensitive: { type: 'boolean', description: 'Default false.' },
+        max_results: { type: 'number', description: 'Max matching lines to return. Default 100.' },
+      },
+      required: ['pattern'],
+    },
+  },
+  {
+    name: 'git_status',
+    description: 'Get git branch, modified files, and recent commit history for a repository.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        working_dir: { type: 'string', description: 'Path to git repo root. Defaults to cwd.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'git_diff',
+    description: 'Show uncommitted changes in a git repo as a diff.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        working_dir: { type: 'string', description: 'Path to git repo root.' },
+        staged: { type: 'boolean', description: 'Show staged changes. Default false.' },
+        file: { type: 'string', description: 'Limit diff to a specific file.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'list_processes',
+    description: 'List running system processes, optionally filtered by a search term.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        grep_pattern: { type: 'string', description: 'Filter processes by this string.' },
+      },
+      required: [],
+    },
+  },
 ]
  
 // =============================================================================
@@ -387,10 +452,14 @@ async function executeTool(name, input) {
       }
  
       case 'write_file': {
+        let oldContent = null
+        try { oldContent = await fs.promises.readFile(input.path, 'utf8') } catch { /* new file */ }
         await fs.promises.writeFile(input.path, input.content, 'utf8')
         return {
           success: true,
           result: `Wrote ${input.content.length} characters to ${input.path}`,
+          oldContent,
+          newContent: input.content,
         }
       }
  
@@ -446,6 +515,93 @@ async function executeTool(name, input) {
         return { success: true, result }
       }
  
+      // ── Code Mode tools (Phase 6) ──────────────────────────────────────────
+
+      case 'execute_bash': {
+        const { command, working_dir, timeout_ms = 30000 } = input
+        const BLOCKED = [/rm\s+-rf\s+\//, /mkfs/, /dd\s+if=.*of=\/dev/]
+        if (BLOCKED.some((rx) => rx.test(command))) {
+          return { success: false, result: 'Command blocked by safety filter.' }
+        }
+        const result = await new Promise((resolve) => {
+          exec(command, {
+            cwd: working_dir || process.cwd(),
+            timeout: Math.min(timeout_ms, 120000),
+            maxBuffer: 1024 * 1024 * 5,
+            shell: process.platform === 'win32' ? 'cmd.exe' : '/bin/bash',
+          }, (error, stdout, stderr) => {
+            const out = [stdout, stderr].filter(Boolean).join('\n').trim()
+            resolve({
+              success: !error || error.killed === false,
+              result: out || (error ? error.message : '(no output)'),
+            })
+          })
+        })
+        return result
+      }
+
+      case 'grep_files': {
+        const { pattern, path: searchPath = '.', glob_pattern, case_sensitive = false, max_results = 100 } = input
+        const { execSync } = require('child_process')
+        try {
+          let hasRg = false
+          try { execSync(process.platform === 'win32' ? 'where rg' : 'which rg', { stdio: 'ignore' }); hasRg = true } catch { /* no rg */ }
+          let cmd
+          if (hasRg) {
+            cmd = `rg --line-number --no-heading --color=never ${case_sensitive ? '' : '--ignore-case'} ${glob_pattern ? `--glob "${glob_pattern}"` : ''} "${pattern}" "${searchPath}"`
+          } else {
+            cmd = `grep -rn ${case_sensitive ? '' : '-i'} ${glob_pattern ? `--include="${glob_pattern}"` : ''} "${pattern}" "${searchPath}"`
+          }
+          const output = execSync(cmd, { maxBuffer: 1024 * 1024 * 2, encoding: 'utf8' }).trim()
+          const matches = output ? output.split('\n').slice(0, max_results) : []
+          return { success: true, result: matches.join('\n') || 'No matches found.' }
+        } catch (err) {
+          if (err.status === 1) return { success: true, result: 'No matches found.' }
+          return { success: false, result: err.message }
+        }
+      }
+
+      case 'git_status': {
+        const { working_dir } = input
+        const { execSync } = require('child_process')
+        const cwd = working_dir || process.cwd()
+        try {
+          const branch = execSync('git branch --show-current', { cwd, encoding: 'utf8' }).trim()
+          const status = execSync('git status --porcelain -b', { cwd, encoding: 'utf8' }).trim()
+          const log = execSync('git log --oneline -10', { cwd, encoding: 'utf8' }).trim()
+          return { success: true, result: `Branch: ${branch}\n\n${status}\n\nRecent commits:\n${log}` }
+        } catch (err) {
+          return { success: false, result: err.message }
+        }
+      }
+
+      case 'git_diff': {
+        const { working_dir, staged = false, file } = input
+        const { execSync } = require('child_process')
+        const cwd = working_dir || process.cwd()
+        try {
+          const cmd = `git diff ${staged ? '--staged' : ''} ${file ? `-- "${file}"` : ''}`
+          const diff = execSync(cmd, { cwd, encoding: 'utf8', maxBuffer: 1024 * 1024 * 5 })
+          return { success: true, result: diff.trim() || 'No changes.' }
+        } catch (err) {
+          return { success: false, result: err.message }
+        }
+      }
+
+      case 'list_processes': {
+        const { grep_pattern } = input
+        const { execSync } = require('child_process')
+        try {
+          const cmd = process.platform === 'win32'
+            ? `tasklist${grep_pattern ? ` | findstr /i "${grep_pattern}"` : ''}`
+            : `ps aux${grep_pattern ? ` | grep -i "${grep_pattern}" | grep -v grep` : ''}`
+          const output = execSync(cmd, { encoding: 'utf8', maxBuffer: 1024 * 1024 }).trim()
+          return { success: true, result: output || 'No processes found.' }
+        } catch (err) {
+          return { success: false, result: err.message }
+        }
+      }
+
       default:
         return { success: false, result: `Unknown tool: ${name}` }
     }
@@ -622,7 +778,9 @@ ipcMain.on('claude-stream-start', async (event, { requestId, messages, model, ap
             input: tool.input,
             result,
             success,
-            imageDataUrl: toolExecution.imageDataUrl ?? null, // for screenshot display in UI
+            imageDataUrl: toolExecution.imageDataUrl ?? null,
+            oldContent: toolExecution.oldContent ?? null,
+            newContent: toolExecution.newContent ?? null,
           })
  
           // Screenshots go to Claude as image vision blocks so it can SEE them

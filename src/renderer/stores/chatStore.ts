@@ -22,6 +22,8 @@ export interface ToolCall {
   success?: boolean                   // Whether the tool ran without error
   status: 'running' | 'done' | 'error'
   imageDataUrl?: string               // Phase 5: set for browser_screenshot, renders inline in ToolCallCard
+  oldContent?: string | null          // Phase 6: write_file — content before the write (for DiffViewer)
+  newContent?: string                 // Phase 6: write_file — content after the write (for DiffViewer)
 }
 
 export interface Message {

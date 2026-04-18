@@ -4,6 +4,8 @@ import { useClaudeStream } from '../hooks/useClaudeStream'
 import { useSettingsStore, isClaudeModel } from '../stores/settingsStore'
 import { MessageList } from './MessageList'
 import { InputBox } from './InputBox'
+import { useState, useCallback } from 'react';
+import { ArtifactsPane, Artifact } from './ArtifactsPane';
 
 // ─── EmptyState ───────────────────────────────────────────────────────────────
 
@@ -86,13 +88,20 @@ function useActiveStream(model: string) {
 
 export function ChatPane() {
   const { conversations, activeConversationId } = useChatStore()
-
   const conv = activeConversationId ? conversations[activeConversationId] : null
 
-  // Call both hooks (React rules require unconditional hook calls)
+  // All hooks must be before any early returns (React rules)
   const { sendMessage, stopStream, isStreaming } = useActiveStream(
     conv?.model ?? ''
   )
+
+  const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null)
+
+  const handleOpenInArtifacts = useCallback((code: string, language: string) => {
+    setActiveArtifact({ id: crypto.randomUUID(), code, language, timestamp: Date.now() })
+  }, [])
+
+  const handleCloseArtifacts = useCallback(() => setActiveArtifact(null), [])
 
   if (!activeConversationId || !conv) {
     return (
@@ -103,16 +112,32 @@ export function ChatPane() {
   }
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <ConversationHeader />
+    <div className="flex h-full overflow-hidden">
 
-      <MessageList messages={conv.messages} />
+      {/* Chat column — shrinks to 50% when artifact is open */}
+      <div className={`flex flex-col min-w-0 transition-all duration-300 ${activeArtifact ? 'w-1/2' : 'w-full'}`}>
+        <ConversationHeader />
+        <MessageList
+          messages={conv.messages}
+          onOpenInArtifacts={handleOpenInArtifacts}
+        />
+        <InputBox
+          onSend={sendMessage}
+          onStop={stopStream}
+          isStreaming={isStreaming}
+        />
+      </div>
 
-      <InputBox
-        onSend={sendMessage}
-        onStop={stopStream}
-        isStreaming={isStreaming}
-      />
+      {/* Artifacts pane — slides in on the right when an artifact is set */}
+      {activeArtifact && (
+        <div className="w-1/2 shrink-0 overflow-hidden">
+          <ArtifactsPane
+            artifact={activeArtifact}
+            onClose={handleCloseArtifacts}
+          />
+        </div>
+      )}
+
     </div>
   )
 }

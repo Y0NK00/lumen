@@ -47,6 +47,8 @@ declare global {
           result: string
           success: boolean
           imageDataUrl?: string   // Phase 5: set for browser_screenshot
+          oldContent?: string | null  // Phase 6: write_file previous content
+          newContent?: string | null  // Phase 6: write_file new content
         }) => void
       ) => () => void
 
@@ -158,7 +160,7 @@ export function useClaudeStream(): UseClaudeStreamReturn {
         // input is now fully parsed (main sends it back for display).
         // imageDataUrl is set for browser_screenshot — ToolCallCard shows it inline.
         const cleanupToolResult = window.tower.onClaudeToolResult(
-          ({ requestId: id, toolId, input, result, success, imageDataUrl }) => {
+          ({ requestId: id, toolId, input, result, success, imageDataUrl, oldContent, newContent }) => {
             if (id !== requestId) return
 
             useChatStore.getState().updateToolCall(
@@ -171,6 +173,8 @@ export function useClaudeStream(): UseClaudeStreamReturn {
                 success,
                 status: success ? 'done' : 'error',
                 imageDataUrl: imageDataUrl ?? undefined,
+                oldContent: oldContent ?? undefined,
+                newContent: newContent ?? undefined,
               }
             )
           }

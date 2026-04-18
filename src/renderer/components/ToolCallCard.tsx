@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ToolCall } from '../stores/chatStore'
+import { DiffViewer } from './DiffViewer'
 
 // ─── Tool name → human label ──────────────────────────────────────────────────
 
@@ -144,6 +145,15 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
                 {toolCall.result}
               </pre>
             </Collapsible>
+          )}
+
+          {/* ── Diff view for write_file ──────────────────────────────────── */}
+          {toolCall.name === 'write_file' && toolCall.newContent && (
+            <DiffViewer
+              oldContent={toolCall.oldContent ?? ''}
+              newContent={toolCall.newContent}
+              filename={String(toolCall.input?.path ?? '')}
+            />
           )}
         </>
       )}
