@@ -44,7 +44,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
   };
 
   return (
-    <div className="relative rounded-xl overflow-hidden border border-white/10 my-3 group">
+    <div className="relative rounded-xl overflow-hidden border border-white/10 my-3 group max-w-full">
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 py-2 bg-black/50 border-b border-white/10">
         <span className="text-xs text-white/30 font-mono tracking-wider uppercase">
@@ -69,13 +69,14 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
         </div>
       </div>
 
-      {/* Syntax highlighted code */}
+      {/* Syntax highlighted code — overflow-x-auto lets wide code scroll instead of overflowing */}
+      <div className="overflow-x-auto">
       <SyntaxHighlighter
         style={oneDark}
         language={lang}
         showLineNumbers={showLineNumbers}
-        wrapLines
-        wrapLongLines
+        wrapLines={false}
+        wrapLongLines={false}
         customStyle={{
           margin: 0,
           borderRadius: 0,
@@ -83,6 +84,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
           fontSize: '0.83rem',
           padding: '1rem 1.25rem',
           lineHeight: '1.6',
+          minWidth: 'max-content',
         }}
         codeTagProps={{
           style: {
@@ -92,6 +94,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
       >
         {code}
       </SyntaxHighlighter>
+      </div>
     </div>
   );
 };

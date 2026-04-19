@@ -850,8 +850,68 @@ app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) creat
  
 // ── Window controls ──
 ipcMain.on('win:minimize', () => mainWindow?.minimize());
-ipcMain.on('win:maximize', () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow?.maximize());
-ipcMain.on('win:close',    () => mainWindow?.close());
+ipcMain.on('win:maximize', () => {
+  if (mainWindow?.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow?.maximize();
+  }
+});
+ipcMain.on('win:close', () => mainWindow?.close());
+
+// Sync maximize state to renderer
+if (mainWindow) {
+  mainWindow.on('maximize',   () => mainWindow.webContents.send('win:maximized', true));
+  mainWindow.on('unmaximize', () => mainWindow.webContents.send('win:maximized', false));
+}
+
+// ── Open conversation in new window ──
+ipcMain.on('win:openConversation', (_, { conversationId }) => {
+  const IS_DEV = !app.isPackaged;
+  const IS_V2  = process.env.LUMEN_V2 === 'true';
+
+  const win = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    minWidth: 800,
+    minHeight: 600,
+    frame: false,
+    backgroundColor: '#080810',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  const query = `?conv=${encodeURIComponent(conversationId)}`;
+
+  if (IS_V2 && IS_DEV) {
+    win.loadURL(`http://localhost:5173/${query}`);
+  } else if (IS_V2) {
+    win.loadFile(path.join(__dirname, 'dist', 'renderer', 'index.html'), { query: { conv: conversationId } });
+  } else {
+    win.loadFile(path.join(__dirname, 'renderer', 'index.html'), { query: { conv: conversationId } });
+  }
+
+  // Sync maximize state for child window too
+  win.on('maximize',   () => win.webContents.send('win:maximized', true));
+  win.on('unmaximize', () => win.webContents.send('win:maximized', false));
+
+  // Child window controls forward to itself
+  ipcMain.on('win:minimize', () => {});   // already registered; BrowserWindow handles its own focus
+});
+
+// ── Folder picker dialog ──
+ipcMain.handle('dialog:openFolder', async (event) => {
+  const { dialog } = require('electron');
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const result = await dialog.showOpenDialog(win, {
+    properties: ['openDirectory'],
+    title: 'Select Working Folder',
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
  
 // ── Data persistence ──
 ipcMain.handle('data:loadConversations', () => readJSON(conversationsFile, []));

@@ -1,23 +1,32 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 
 @theme {
-  --color-background:      #0c0c0c;
-  --color-sidebar:         #111111;
-  --color-surface:         #1a1a1a;
-  --color-surface-hover:   #222222;
-  --color-surface-active:  #2a2a2a;
-  --color-border:          #2a2a2a;
-  --color-text-primary:    #ececec;
-  --color-text-secondary:  #a0a0a0;
-  --color-text-muted:      #555555;
-  --color-accent:          #c084fc;
-  --color-accent-hover:    #a855f7;
-  --color-error:           #f87171;
-  --color-user-bubble:     #1e1e2e;
+  /* ── Base surfaces ── */
+  --color-background:       #080810;
+  --color-sidebar:          #0b0b17;
+  --color-surface:          #10101e;
+  --color-surface-hover:    #161626;
+  --color-surface-active:   #1c1c2e;
+  --color-border:           #1a1a2c;
+
+  /* ── Text ── */
+  --color-text-primary:     #eeeef5;
+  --color-text-secondary:   #8888aa;
+  --color-text-muted:       #404058;
+
+  /* ── Accent — Lumen violet ── */
+  --color-accent:           #8b5cf6;
+  --color-accent-hover:     #7c3aed;
+
+  /* ── Semantic ── */
+  --color-error:            #f87171;
+  --color-user-bubble:      transparent;
   --color-assistant-bubble: transparent;
-  --color-code-bg:         #161616;
-  --color-code-header:     #1c1c1c;
-  --color-code-inline:     #2a2a2a;
+  --color-code-bg:          #08080f;
+  --color-code-header:      #0d0d1a;
+  --color-code-inline:      #14142a;
+
+  /* ── Typography ── */
   --font-sans: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
 }
@@ -32,26 +41,53 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
-::-webkit-scrollbar { width: 5px; height: 5px; }
+/* ── Scrollbars ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 999px; }
-::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+::-webkit-scrollbar-thumb:hover { background: #333350; }
 
+/* ── Streaming cursor ── */
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 .streaming-cursor::after {
   content: "▋"; display: inline-block; margin-left: 1px;
   animation: blink 0.8s step-end infinite;
-  color: var(--color-accent); font-size: 0.9em;
+  color: var(--color-accent); font-size: 0.85em; vertical-align: baseline;
 }
 
-.prose { color: var(--color-text-primary); font-size: 0.875rem; line-height: 1.7; }
-.prose p { margin-bottom: 0.75em; }
+/* ── Message entry animation ── */
+@keyframes messageIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.message-enter {
+  animation: messageIn 0.18s ease-out forwards;
+}
+
+/* ── Prose (markdown base) ── */
+.prose { color: var(--color-text-primary); font-size: 0.875rem; line-height: 1.75; }
+.prose p { margin-bottom: 0.65em; }
 .prose p:last-child { margin-bottom: 0; }
 .prose h1, .prose h2, .prose h3 { color: var(--color-text-primary); font-weight: 600; margin: 1em 0 0.4em; }
 .prose h1 { font-size: 1.2em; } .prose h2 { font-size: 1.1em; } .prose h3 { font-size: 1em; }
-.prose ul, .prose ol { padding-left: 1.4em; margin-bottom: 0.75em; }
-.prose li { margin-bottom: 0.25em; }
+.prose ul, .prose ol { padding-left: 1.4em; margin-bottom: 0.65em; }
+.prose li { margin-bottom: 0.2em; }
 .prose strong { font-weight: 600; }
-.prose table { width: 100%; border-collapse: collapse; margin-bottom: 0.75em; font-size: 0.8rem; }
+.prose table { width: 100%; border-collapse: collapse; margin-bottom: 0.65em; font-size: 0.8rem; }
 .prose th, .prose td { border: 1px solid var(--color-border); padding: 0.4em 0.75em; }
 .prose th { background: var(--color-surface); font-weight: 600; }
+
+/* ── Input focus ── */
+input:focus, textarea:focus {
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.08);
+}
+
+/* ── Native select arrow ── */
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23404058' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 8px center;
+  background-repeat: no-repeat;
+  background-size: 14px;
+  padding-right: 28px !important;
+}

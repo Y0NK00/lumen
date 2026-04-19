@@ -1,89 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { useEffect, useRef } from 'react'
 import type { Message } from '../stores/chatStore'
 import { ToolCallCard } from './ToolCallCard'
-import { MarkdownRenderer } from './MarkdownRenderer';
-import { ThinkingBlock, extractThinkingFromMessage } from './ThinkingBlock';
-
-// =============================================================================
-// PHASE 4 CHANGES vs Phase 2:
-//   - Imports ToolCallCard
-//   - MessageBubble renders toolCalls below text content (assistant only)
-//   - No other changes
-// =============================================================================
-
-// ─── Code block renderer ──────────────────────────────────────────────────────
-
-interface CodeProps {
-  inline?: boolean
-  className?: string
-  children?: React.ReactNode
-}
-
-function CodeBlock({ inline, className, children }: CodeProps) {
-  const language = /language-(\w+)/.exec(className ?? '')?.[1] ?? 'text'
-  const code = String(children).replace(/\n$/, '')
-
-  if (inline) {
-    return (
-      <code className="px-1.5 py-0.5 rounded text-xs font-mono bg-code-inline text-text-primary">
-        {children}
-      </code>
-    )
-  }
-
-  return (
-    <div className="my-3 rounded-lg overflow-hidden border border-border">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-code-header border-b border-border">
-        <span className="text-xs text-text-muted font-mono">{language}</span>
-        <CopyButton text={code} />
-      </div>
-      <SyntaxHighlighter
-        language={language}
-        style={oneDark}
-        customStyle={{
-          margin: 0,
-          padding: '12px 16px',
-          fontSize: '13px',
-          lineHeight: '1.5',
-          background: 'var(--color-code-bg)',
-        }}
-        codeTagProps={{ style: { fontFamily: 'var(--font-mono)' } }}
-      >
-        {code}
-      </SyntaxHighlighter>
-    </div>
-  )
-}
-
-// ─── Copy button ──────────────────────────────────────────────────────────────
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-
-  return (
-    <button
-      onClick={() => {
-        navigator.clipboard.writeText(text).then(() => {
-          setCopied(true)
-          setTimeout(() => setCopied(false), 1500)
-        })
-      }}
-      className="text-xs text-text-muted hover:text-text-primary transition-colors"
-    >
-      {copied ? 'Copied!' : 'Copy'}
-    </button>
-  )
-}
+import { MarkdownRenderer } from './MarkdownRenderer'
+import { ThinkingBlock, extractThinkingFromMessage } from './ThinkingBlock'
 
 // ─── Single message bubble ────────────────────────────────────────────────────
 
 interface MessageBubbleProps {
   message: Message
-  onOpenInArtifacts: (code: string, language: string) => void; // ADD
+  onOpenInArtifacts: (code: string, language: string) => void
 }
 
 function MessageBubble({ message, onOpenInArtifacts }: MessageBubbleProps) {
@@ -91,68 +16,70 @@ function MessageBubble({ message, onOpenInArtifacts }: MessageBubbleProps) {
   const isEmpty = !message.content && message.isStreaming && !message.toolCalls?.length
 
   return (
-    <div className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
-      {/* Assistant avatar dot */}
+    <div className={`flex w-full min-w-0 ${isUser ? 'justify-end' : 'justify-start'} mb-5 message-enter`}>
+
+      {/* Assistant avatar */}
       {!isUser && (
-        <div className="w-6 h-6 rounded-full bg-accent shrink-0 mr-3 mt-0.5 flex items-center justify-center">
-          <span className="text-xs">💡</span>
+        <div className="w-7 h-7 rounded-lg bg-accent/15 border border-accent/25 shrink-0 mr-3 mt-0.5
+                        flex items-center justify-center">
+          <span className="text-sm leading-none">💡</span>
         </div>
       )}
 
-      <div
-        className={[
-          'max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed',
-          isUser
-            ? 'bg-user-bubble text-text-primary rounded-tr-sm'
-            : 'bg-assistant-bubble text-text-primary rounded-tl-sm',
-        ].join(' ')}
-      >
-        {/* Error state */}
+      <div className={[
+        // Assistant bubbles fill more of the rail (85%) so they don't feel
+        // cramped; user bubbles stay narrower (72%) to keep their trailing
+        // right-edge visually distinct.
+        'min-w-0 rounded-2xl text-sm leading-relaxed overflow-hidden',
+        isUser
+          ? 'max-w-[72%] bg-surface border border-border text-text-primary px-4 py-3 rounded-tr-sm'
+          : 'max-w-[85%] text-text-primary',
+      ].join(' ')}>
+
+        {/* Error */}
         {message.error && (
-          <p className="text-error text-xs mb-1">{message.error}</p>
+          <p className="text-error text-xs mb-2 px-1">{message.error}</p>
         )}
 
-        {/* Empty streaming state — show pulsing dots */}
+        {/* Empty streaming — pulsing dots */}
         {isEmpty ? (
           <ThinkingIndicator />
         ) : isUser ? (
-          // User messages: plain text, preserve newlines
-          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          <p className="whitespace-pre-wrap break-words text-[13.5px]">{message.content}</p>
         ) : (
-          // Assistant messages: markdown + optional tool call cards
-          <div className="prose prose-sm prose-invert max-w-none break-words">
-            {/* Text content (may be empty if Claude went straight to tool use) */}
+          <div className="min-w-0 overflow-hidden">
+            {/* Text content */}
             {message.content && (
               <>
                 {(() => {
-                     const { thinking, mainContent } = extractThinkingFromMessage(message.content);
-                     return (
-                      <>
-                         {thinking && <ThinkingBlock content={thinking} />}
-                         <MarkdownRenderer
-                         content={mainContent}
-                         onOpenInArtifacts={onOpenInArtifacts}
+                  const { thinking, mainContent } = extractThinkingFromMessage(message.content)
+                  return (
+                    <>
+                      {thinking && <ThinkingBlock content={thinking} />}
+                      <MarkdownRenderer
+                        content={mainContent}
+                        onOpenInArtifacts={onOpenInArtifacts}
                       />
-                     </>
-                     );
+                    </>
+                  )
                 })()}
-                {/* Blinking cursor while streaming and no tool calls are running */}
+                {/* Blinking cursor while streaming */}
                 {message.isStreaming && !message.toolCalls?.some((tc) => tc.status === 'running') && (
                   <span className="streaming-cursor" aria-hidden />
                 )}
               </>
             )}
 
-            {/* ── Phase 4: Tool call cards ──────────────────────────────── */}
+            {/* Tool call cards */}
             {message.toolCalls && message.toolCalls.length > 0 && (
-              <div className="not-prose mt-1">
+              <div className="mt-1 space-y-1">
                 {message.toolCalls.map((tc) => (
                   <ToolCallCard key={tc.id} toolCall={tc} />
                 ))}
               </div>
             )}
 
-            {/* Thinking indicator: no text yet but streaming (waiting for tool result) */}
+            {/* Waiting for tool result */}
             {!message.content && message.isStreaming && (
               <ThinkingIndicator />
             )}
@@ -167,7 +94,7 @@ function MessageBubble({ message, onOpenInArtifacts }: MessageBubbleProps) {
 
 function ThinkingIndicator() {
   return (
-    <div className="flex items-center gap-1 py-1">
+    <div className="flex items-center gap-1 py-1 px-1">
       <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:0ms]" />
       <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:150ms]" />
       <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:300ms]" />
@@ -179,7 +106,7 @@ function ThinkingIndicator() {
 
 interface MessageListProps {
   messages: Message[]
-    onOpenInArtifacts: (code: string, language: string) => void;
+  onOpenInArtifacts: (code: string, language: string) => void
 }
 
 export function MessageList({ messages, onOpenInArtifacts }: MessageListProps) {
@@ -209,11 +136,15 @@ export function MessageList({ messages, onOpenInArtifacts }: MessageListProps) {
   if (messages.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center text-center px-8 gap-3">
-        <span className="text-5xl" aria-hidden>💡</span>
-        <h2 className="text-lg font-semibold text-text-primary">What can I help with?</h2>
-        <p className="text-sm text-text-muted max-w-sm">
-          Ask anything — or ask Claude to read a file, list a folder, or write something to disk.
-        </p>
+        <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+          <span className="text-xl">💡</span>
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-text-primary mb-1">What can I help with?</h2>
+          <p className="text-xs text-text-muted max-w-xs">
+            Ask anything — or ask Lumen to read a file, list a folder, run a command, or write something to disk.
+          </p>
+        </div>
       </div>
     )
   }
@@ -222,10 +153,14 @@ export function MessageList({ messages, onOpenInArtifacts }: MessageListProps) {
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className="flex-1 overflow-y-auto px-6 py-6"
+      className="flex-1 overflow-y-auto px-6 pt-5 pb-2 min-h-0"
     >
       {messages.map((message) => (
-        <MessageBubble key={message.id} message={message} onOpenInArtifacts={onOpenInArtifacts} />
+        <MessageBubble
+          key={message.id}
+          message={message}
+          onOpenInArtifacts={onOpenInArtifacts}
+        />
       ))}
       <div ref={bottomRef} />
     </div>

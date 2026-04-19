@@ -36,13 +36,23 @@ export interface Message {
   toolCalls?: ToolCall[]              // Phase 4: populated when Claude uses tools
 }
 
+// Conversations live in one of two top-level modes: 'chat' (regular chat)
+// or 'code' (code sessions with shell/grep/git tool access).
+// Field is optional for backward compat with pre-migration stored data;
+// sidebar filtering treats `undefined` as 'chat'.
+export type ConvMode = 'chat' | 'code'
+
 export interface Conversation {
   id: string
   title: string
   model: string
+  mode?: ConvMode
   messages: Message[]
   createdAt: number
   updatedAt: number
+  pinned?: boolean              // v2: surfaced in the Pinned sidebar section
+  pinnedAt?: number             // when it was pinned (used to sort pinned list)
+  projectId?: string            // v3: optional Project scope (rootPath + systemPrompt)
 }
 
 interface ChatStore {
@@ -50,10 +60,12 @@ interface ChatStore {
   activeConversationId: string | null
 
   // Conversation actions
-  createConversation: (model?: string) => string
+  createConversation: (model?: string, mode?: ConvMode, projectId?: string) => string
   setActiveConversation: (id: string) => void
   deleteConversation: (id: string) => void
   updateConversationTitle: (id: string, title: string) => void
+  togglePinned: (id: string) => void
+  setConversationProject: (id: string, projectId: string | null) => void
 
   // Message actions — addMessage returns the created message so callers can
   // reference its ID (e.g. the streaming hook needs to update the same msg).
@@ -76,7 +88,7 @@ export const useChatStore = create<ChatStore>()(
 
       // ── Conversation CRUD ────────────────────────────────────────────────
 
-      createConversation: (model = 'qwen2.5:14b') => {
+      createConversation: (model = 'qwen2.5:14b', mode: ConvMode = 'chat', projectId?: string) => {
         const id = crypto.randomUUID()
         const now = Date.now()
         set((state) => ({
@@ -86,9 +98,11 @@ export const useChatStore = create<ChatStore>()(
               id,
               title: 'New Conversation',
               model,
+              mode,
               messages: [],
               createdAt: now,
               updatedAt: now,
+              projectId,
             },
           },
           activeConversationId: id,
@@ -119,6 +133,44 @@ export const useChatStore = create<ChatStore>()(
             conversations: {
               ...state.conversations,
               [id]: { ...conv, title },
+            },
+          }
+        })
+      },
+
+      // Scope a conversation to a Project (or clear it with null).
+      setConversationProject: (id, projectId) => {
+        set((state) => {
+          const conv = state.conversations[id]
+          if (!conv) return state
+          return {
+            conversations: {
+              ...state.conversations,
+              [id]: {
+                ...conv,
+                projectId: projectId ?? undefined,
+                updatedAt: Date.now(),
+              },
+            },
+          }
+        })
+      },
+
+      // Toggle pinned state. Pinned conversations surface in the sidebar's
+      // "Pinned" section, sorted by pinnedAt descending (most recently pinned first).
+      togglePinned: (id) => {
+        set((state) => {
+          const conv = state.conversations[id]
+          if (!conv) return state
+          const nextPinned = !conv.pinned
+          return {
+            conversations: {
+              ...state.conversations,
+              [id]: {
+                ...conv,
+                pinned: nextPinned,
+                pinnedAt: nextPinned ? Date.now() : undefined,
+              },
             },
           }
         })
@@ -247,6 +299,34 @@ export const useChatStore = create<ChatStore>()(
     }),
     {
       name: 'lumen-conversations',
+      // ── Persistence migrations ─────────────────────────────────────────
+      // Each version bump should add a branch below and keep older branches
+      // intact so a store on an older version can migrate through them in
+      // order. Zustand only runs migrate() when persisted.version < current.
+      //
+      // v1: added `mode` to Conversation. Backfill 'chat' on missing fields.
+      // v2: added `pinned` / `pinnedAt`. No backfill needed — undefined means
+      //     not pinned, which is the correct default. Version bump just
+      //     documents the schema change.
+      // v3: added `projectId`. No backfill needed — undefined means unscoped.
+      version: 3,
+      migrate: (persisted, version) => {
+        const state = persisted as { conversations?: Record<string, Conversation> } | undefined
+        if (!state?.conversations) return persisted
+
+        let convs = state.conversations
+
+        if (version < 1) {
+          const migrated: Record<string, Conversation> = {}
+          for (const [id, conv] of Object.entries(convs)) {
+            migrated[id] = { ...conv, mode: conv.mode ?? 'chat' }
+          }
+          convs = migrated
+        }
+        // v2 is a no-op for data — fields default to undefined correctly.
+
+        return { ...state, conversations: convs }
+      },
     }
   )
 )

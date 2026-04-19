@@ -86,6 +86,36 @@ function Collapsible({ label, children, defaultOpen = false }: CollapsibleProps)
   )
 }
 
+// ─── Summary line builders ────────────────────────────────────────────────────
+// Produce a short, human-readable summary for the card header so users don't
+// need to expand Input to see what happened. Falls back to '' when we can't
+// produce anything meaningful.
+
+function summaryForTool(toolCall: ToolCall): string {
+  const { name, input } = toolCall
+  const inp = input as Record<string, unknown>
+
+  switch (name) {
+    case 'read_file':
+    case 'write_file':
+      return typeof inp.path === 'string' ? String(inp.path) : ''
+    case 'list_dir':
+      return typeof inp.path === 'string' ? String(inp.path) : ''
+    case 'browser_navigate':
+      return typeof inp.url === 'string' ? String(inp.url) : ''
+    case 'browser_click':
+      return typeof inp.selector === 'string' ? String(inp.selector) : ''
+    case 'browser_type':
+      return typeof inp.text === 'string' ? `"${String(inp.text).slice(0, 40)}"` : ''
+    case 'run_command':
+      return typeof inp.command === 'string' ? String(inp.command).slice(0, 60) : ''
+    case 'web_search':
+      return typeof inp.query === 'string' ? `"${String(inp.query)}"` : ''
+    default:
+      return ''
+  }
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface ToolCallCardProps {
@@ -96,20 +126,26 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
   const hasInput  = toolCall.input && Object.keys(toolCall.input).length > 0
   const hasResult = toolCall.result !== undefined
   const isScreenshot = toolCall.name === 'browser_screenshot'
+  const summary = summaryForTool(toolCall)
 
   return (
     <div className="mt-3 rounded-lg border border-border bg-assistant-bubble/50 px-3 py-2.5 text-xs">
 
-      {/* ── Header: icon + tool name + status ─────────────────────────────── */}
-      <div className="flex items-center gap-2">
+      {/* ── Header: icon + tool name + summary + status ───────────────────── */}
+      <div className="flex items-center gap-2 min-w-0">
         <StatusIcon status={toolCall.status} />
-        <span className="text-base leading-none" aria-hidden>{toolIcon(toolCall.name)}</span>
-        <span className="font-mono font-medium text-accent">{toolLabel(toolCall.name)}</span>
+        <span className="text-base leading-none shrink-0" aria-hidden>{toolIcon(toolCall.name)}</span>
+        <span className="font-mono font-medium text-accent shrink-0">{toolLabel(toolCall.name)}</span>
+        {summary && (
+          <span className="font-mono text-text-secondary truncate" title={summary}>
+            {summary}
+          </span>
+        )}
         {toolCall.status === 'running' && (
-          <span className="text-text-muted italic">executing…</span>
+          <span className="text-text-muted italic shrink-0">executing…</span>
         )}
         {toolCall.status === 'error' && (
-          <span className="text-error italic">failed</span>
+          <span className="text-error italic shrink-0">failed</span>
         )}
       </div>
 

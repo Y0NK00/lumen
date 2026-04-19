@@ -6,6 +6,18 @@ contextBridge.exposeInMainWorld('tower', {
   maximize:  () => ipcRenderer.send('win:maximize'),
   close:     () => ipcRenderer.send('win:close'),
 
+  // Open a conversation in its own window
+  openConversationWindow: (conversationId) => {
+    ipcRenderer.send('win:openConversation', { conversationId })
+  },
+
+  // Maximize state sync
+  onWindowMaximized: (cb) => ipcRenderer.on('win:maximized', cb),
+  offWindowMaximized: (cb) => ipcRenderer.removeListener('win:maximized', cb),
+
+  // Folder picker dialog (used by Helm Working Folders widget)
+  openFolderDialog: () => ipcRenderer.invoke('dialog:openFolder'),
+
   // Data
   loadConversations: ()  => ipcRenderer.invoke('data:loadConversations'),
   saveConversations: (v) => ipcRenderer.invoke('data:saveConversations', v),

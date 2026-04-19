@@ -57,6 +57,19 @@ declare global {
       writeFile: (path: string, content: string) => Promise<void>
       listDir: (path: string) => Promise<string[]>
       runCommand: (cmd: string) => Promise<string>
+
+      // ── Window controls (Phase 6 titlebar) ───────────────────────────────
+      minimize: () => void
+      maximize: () => void
+      close: () => void
+      onWindowMaximized?: (cb: (e: unknown, maximized: boolean) => void) => void
+      offWindowMaximized?: (cb: (e: unknown, maximized: boolean) => void) => void
+
+      // ── Multi-window ─────────────────────────────────────────────────────────
+      openConversationWindow?: (conversationId: string) => void
+
+      // ── Dialogs ───────────────────────────────────────────────────────────────
+      openFolderDialog?: () => Promise<string | null>
     }
   }
 }
