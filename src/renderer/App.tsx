@@ -39,9 +39,7 @@ export default function App() {
     return useSettingsStore.subscribe(push)
   }, [])
 
-  // ── Appearance: apply font-size to root element ────────────────────────────
-  // Since Tailwind uses rem units, changing the root font-size scales the whole
-  // UI. xs=12px, sm=14px (default), base=16px.
+  // ── Appearance: font size ─────────────────────────────────────────────────
   useEffect(() => {
     const SIZES = { xs: '12px', sm: '14px', base: '16px' } as const
     const apply = (s: ReturnType<typeof useSettingsStore.getState>) => {
@@ -49,6 +47,63 @@ export default function App() {
     }
     apply(useSettingsStore.getState())
     return useSettingsStore.subscribe(apply)
+  }, [])
+
+  // ── Appearance: theme + color mode ────────────────────────────────────────
+  useEffect(() => {
+    const apply = (s: ReturnType<typeof useSettingsStore.getState>) => {
+      const root = document.documentElement
+      root.setAttribute('data-theme', s.theme)
+
+      // Color mode: 'auto' listens to OS preference
+      if (s.colorMode === 'light') {
+        root.setAttribute('data-color-mode', 'light')
+      } else if (s.colorMode === 'dark') {
+        root.removeAttribute('data-color-mode')
+      } else {
+        // auto: check system
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (prefersDark) root.removeAttribute('data-color-mode')
+        else root.setAttribute('data-color-mode', 'light')
+      }
+    }
+    apply(useSettingsStore.getState())
+    const unsub = useSettingsStore.subscribe(apply)
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const mqHandler = () => apply(useSettingsStore.getState())
+    mq.addEventListener('change', mqHandler)
+    return () => { unsub(); mq.removeEventListener('change', mqHandler) }
+  }, [])
+
+  // ── Appearance: chat font ─────────────────────────────────────────────────
+  useEffect(() => {
+    const FONT_CLASSES = ['font-chat-default', 'font-chat-sans', 'font-chat-system', 'font-chat-dyslexia']
+    const apply = (s: ReturnType<typeof useSettingsStore.getState>) => {
+      const root = document.documentElement
+      FONT_CLASSES.forEach((c) => root.classList.remove(c))
+      root.classList.add(`font-chat-${s.chatFont}`)
+    }
+    apply(useSettingsStore.getState())
+    return useSettingsStore.subscribe(apply)
+  }, [])
+
+  // ── Appearance: background animation ─────────────────────────────────────
+  useEffect(() => {
+    const apply = (s: ReturnType<typeof useSettingsStore.getState>) => {
+      const root = document.documentElement
+      const preferReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      const shouldAnimate =
+        s.backgroundAnimation === 'enabled' ||
+        (s.backgroundAnimation === 'auto' && !preferReducedMotion)
+      root.classList.toggle('bg-animated', shouldAnimate)
+    }
+    apply(useSettingsStore.getState())
+    return useSettingsStore.subscribe(apply)
+  }, [])
+
+  // ── Token usage: reset if new month ──────────────────────────────────────
+  useEffect(() => {
+    useSettingsStore.getState().resetTokensIfNewMonth()
   }, [])
 
   // ── Project rootPath sync → main process ─────────────────────────────────────

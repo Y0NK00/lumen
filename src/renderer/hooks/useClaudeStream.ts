@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { useChatStore } from '../stores/chatStore'
-import { useSettingsStore } from '../stores/settingsStore'
+import { useSettingsStore, estimateTokens } from '../stores/settingsStore'
 import { useProjectsStore } from '../stores/projectsStore'
 import type { Message, ToolCall } from '../stores/chatStore'
 
@@ -128,12 +128,23 @@ export function useClaudeStream(): UseClaudeStreamReturn {
       const conv = store.conversations[activeConversationId]
       if (!conv) return
 
-      // ── Project context ──────────────────────────────────────────────────────
-      // If the active project has a system prompt, pass it to the API so it
-      // applies to every turn in this conversation.
+      // ── System prompt: profile + project context ──────────────────────────
       const { projects, activeProjectId } = useProjectsStore.getState()
       const activeProject = activeProjectId ? projects[activeProjectId] : null
-      const systemPrompt = activeProject?.systemPrompt?.trim() || undefined
+      const projectPrompt = activeProject?.systemPrompt?.trim() || ''
+
+      const { profilePreferences, profileAbout, profileCallName } =
+        useSettingsStore.getState()
+
+      const profileBlock = [
+        profileCallName && `The user prefers to be called ${profileCallName}.`,
+        profilePreferences && `User preferences:\n${profilePreferences}`,
+        profileAbout && `About the user:\n${profileAbout}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n')
+
+      const systemPrompt = [profileBlock, projectPrompt].filter(Boolean).join('\n\n') || undefined
 
       // ── Build message history ────────────────────────────────────────────────
       // Only finalized messages. main.js handles the full tool_result history
@@ -236,6 +247,11 @@ export function useClaudeStream(): UseClaudeStreamReturn {
             content: accumulated,
             isStreaming: false,
           })
+
+          // Estimate token usage from content length (~4 chars/token)
+          const inputEst  = estimateTokens(userContent + (systemPrompt ?? ''))
+          const outputEst = estimateTokens(accumulated)
+          useSettingsStore.getState().addTokenUsage(inputEst, outputEst)
 
           cleanupChunk()
           cleanupToolStart()

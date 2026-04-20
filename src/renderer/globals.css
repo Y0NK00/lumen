@@ -31,6 +31,93 @@
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
 }
 
+/* ── Theme overrides (applied via data-theme on <html>) ── */
+
+:root[data-theme="midnight"] {
+  --color-background:       #04040c;
+  --color-sidebar:          #060610;
+  --color-surface:          #0a0a18;
+  --color-surface-hover:    #0e0e20;
+  --color-surface-active:   #131326;
+  --color-border:           #13132a;
+  --color-text-primary:     #d8d8f0;
+  --color-text-secondary:   #7070a0;
+  --color-text-muted:       #353558;
+  --color-accent:           #7c6ee0;
+  --color-accent-hover:     #6b5ec9;
+}
+
+:root[data-theme="slate"] {
+  --color-background:       #0d1117;
+  --color-sidebar:          #10171f;
+  --color-surface:          #161c26;
+  --color-surface-hover:    #1c2330;
+  --color-surface-active:   #222b38;
+  --color-border:           #21262f;
+  --color-text-primary:     #e2e8f0;
+  --color-text-secondary:   #7a90a8;
+  --color-text-muted:       #3d4a5c;
+  --color-accent:           #58a6ff;
+  --color-accent-hover:     #3b8ee8;
+}
+
+/* ── Color mode: light (data-color-mode="light" on <html>) ── */
+
+:root[data-color-mode="light"] {
+  --color-background:       #f8f8fc;
+  --color-sidebar:          #f0f0f8;
+  --color-surface:          #ffffff;
+  --color-surface-hover:    #f3f3fa;
+  --color-surface-active:   #ebebf5;
+  --color-border:           #e0e0ec;
+  --color-text-primary:     #1a1a2e;
+  --color-text-secondary:   #555578;
+  --color-text-muted:       #9898b8;
+  --color-accent:           #7c3aed;
+  --color-accent-hover:     #6d28d9;
+  --color-error:            #dc2626;
+  --color-code-bg:          #f0f0f8;
+  --color-code-header:      #e8e8f4;
+  --color-code-inline:      #ebebf8;
+}
+
+/* ── Chat font classes ── */
+
+.font-chat-default { font-family: "Inter", system-ui, sans-serif; }
+.font-chat-sans    { font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
+.font-chat-system  { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.font-chat-dyslexia { font-family: "OpenDyslexic", "Comic Sans MS", sans-serif; letter-spacing: 0.05em; }
+
+/* ── Background animation ── */
+
+@keyframes bgGradient {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.bg-animated {
+  background-size: 400% 400%;
+  animation: bgGradient 20s ease infinite;
+}
+.bg-animated::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at 20% 80%,
+    rgba(139, 92, 246, 0.04) 0%,
+    transparent 60%
+  ),
+  radial-gradient(
+    ellipse at 80% 20%,
+    rgba(88, 166, 255, 0.03) 0%,
+    transparent 60%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body, #root {
