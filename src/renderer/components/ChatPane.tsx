@@ -201,7 +201,7 @@ export function ChatPane() {
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex flex-1 min-h-0 overflow-hidden">
 
       {/* Chat column */}
       <div className={`flex flex-col min-w-0 transition-all duration-300 ${activeArtifact ? 'w-1/2 border-r border-border' : 'w-full'}`}>
@@ -214,7 +214,7 @@ export function ChatPane() {
         {/* Centered content rail — slightly wider (880px) and balanced so the
             content doesn't feel left-shifted by the 260px sidebar. Messages and
             input share the same rail so the input doesn't look offset. */}
-        <div className="flex flex-col flex-1 min-h-0 w-full max-w-[880px] mx-auto">
+        <div className="flex flex-col flex-1 min-h-0 w-full max-w-[840px] mx-auto">
           <MessageList
             messages={conv.messages}
             onOpenInArtifacts={handleOpenInArtifacts}

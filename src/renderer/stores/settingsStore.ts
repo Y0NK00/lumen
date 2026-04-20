@@ -20,7 +20,6 @@ interface SettingsStore {
   defaultProvider: 'ollama' | 'claude'
 
   // ── Appearance ─────────────────────────────────────────────────────────────
-  // fontSize affects the root font-size (rem-based Tailwind scales with it).
   fontSize: FontSize
   density:  Density
   theme:    Theme
@@ -28,6 +27,17 @@ interface SettingsStore {
   animateMessages:    boolean
   showStreamingCursor: boolean
   compactToolCards:   boolean
+
+  // ── Memory ─────────────────────────────────────────────────────────────────
+  memorySearchRef: boolean
+  memoryGenerate:  boolean
+
+  // ── Capabilities (tool permissions) ────────────────────────────────────────
+  capFileRead:   boolean
+  capFileWrite:  boolean
+  capShellExec:  boolean
+  capBrowser:    boolean
+  capWebSearch:  boolean
 
   // Actions
   setClaudeApiKey: (key: string) => void
@@ -42,6 +52,13 @@ interface SettingsStore {
   setAnimateMessages:     (v: boolean) => void
   setShowStreamingCursor: (v: boolean) => void
   setCompactToolCards:    (v: boolean) => void
+  setMemorySearchRef: (v: boolean) => void
+  setMemoryGenerate:  (v: boolean) => void
+  setCapFileRead:   (v: boolean) => void
+  setCapFileWrite:  (v: boolean) => void
+  setCapShellExec:  (v: boolean) => void
+  setCapBrowser:    (v: boolean) => void
+  setCapWebSearch:  (v: boolean) => void
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -65,6 +82,17 @@ export const useSettingsStore = create<SettingsStore>()(
       showStreamingCursor: true,
       compactToolCards:    false,
 
+      // Memory defaults
+      memorySearchRef: true,
+      memoryGenerate:  false,
+
+      // Capability defaults
+      capFileRead:   true,
+      capFileWrite:  true,
+      capShellExec:  false,
+      capBrowser:    false,
+      capWebSearch:  false,
+
       // Actions
       setClaudeApiKey: (key) => set({ claudeApiKey: key }),
       setDefaultClaudeModel: (model) => set({ defaultClaudeModel: model }),
@@ -78,6 +106,13 @@ export const useSettingsStore = create<SettingsStore>()(
       setAnimateMessages:     (animateMessages)     => set({ animateMessages }),
       setShowStreamingCursor: (showStreamingCursor) => set({ showStreamingCursor }),
       setCompactToolCards:    (compactToolCards)    => set({ compactToolCards }),
+      setMemorySearchRef: (memorySearchRef) => set({ memorySearchRef }),
+      setMemoryGenerate:  (memoryGenerate)  => set({ memoryGenerate }),
+      setCapFileRead:   (capFileRead)   => set({ capFileRead }),
+      setCapFileWrite:  (capFileWrite)  => set({ capFileWrite }),
+      setCapShellExec:  (capShellExec)  => set({ capShellExec }),
+      setCapBrowser:    (capBrowser)    => set({ capBrowser }),
+      setCapWebSearch:  (capWebSearch)  => set({ capWebSearch }),
     }),
     { name: 'lumen-settings' }
   )

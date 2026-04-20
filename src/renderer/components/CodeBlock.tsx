@@ -84,7 +84,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
           fontSize: '0.83rem',
           padding: '1rem 1.25rem',
           lineHeight: '1.6',
-          minWidth: 'max-content',
+          minWidth: '100%',
         }}
         codeTagProps={{
           style: {

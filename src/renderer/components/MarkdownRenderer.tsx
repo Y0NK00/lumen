@@ -114,7 +114,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         // ── Text ──────────────────────────────────────────────────────────
         p({ children }) {
           return (
-            <p className="text-white/80 leading-7 mb-3 text-[0.925rem]">{children}</p>
+            <p className="text-white/80 leading-7 mb-3 text-[0.925rem] break-words">{children}</p>
           );
         },
 
@@ -135,7 +135,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         },
         li({ children }) {
           return (
-            <li className="text-white/80 leading-6 marker:text-white/30">{children}</li>
+            <li className="text-white/80 leading-6 marker:text-white/30 break-words">{children}</li>
           );
         },
 

@@ -36,10 +36,10 @@ function MessageBubble({ message, onOpenInArtifacts }: MessageBubbleProps) {
         // Assistant bubbles fill more of the rail (85%) so they don't feel
         // cramped; user bubbles stay narrower (72%) to keep their trailing
         // right-edge visually distinct.
-        'min-w-0 rounded-2xl text-sm leading-relaxed overflow-hidden',
+        'min-w-0 rounded-2xl text-sm leading-relaxed',
         isUser
-          ? 'max-w-[72%] bg-surface border border-border text-text-primary px-4 py-3 rounded-tr-sm'
-          : 'max-w-[85%] text-text-primary',
+          ? 'max-w-[72%] bg-surface border border-border text-text-primary px-4 py-3 rounded-tr-sm overflow-hidden break-words'
+          : 'max-w-[85%] text-text-primary overflow-x-hidden',
       ].join(' ')}>
 
         {/* Error */}
@@ -53,7 +53,7 @@ function MessageBubble({ message, onOpenInArtifacts }: MessageBubbleProps) {
         ) : isUser ? (
           <p className="whitespace-pre-wrap break-words text-[13.5px]">{message.content}</p>
         ) : (
-          <div className="min-w-0 overflow-hidden">
+          <div className="min-w-0">
             {/* Text content */}
             {message.content && (
               <>
@@ -159,7 +159,7 @@ export function MessageList({ messages, onOpenInArtifacts }: MessageListProps) {
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className="flex-1 overflow-y-auto px-6 pt-5 pb-2 min-h-0"
+      className="flex-1 overflow-y-auto overflow-x-hidden px-8 pt-5 pb-2 min-h-0"
     >
       {messages.map((message) => (
         <MessageBubble

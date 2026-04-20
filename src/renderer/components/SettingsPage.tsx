@@ -2,8 +2,9 @@
 // Full-page Settings — two-column layout (left nav + content), opened as an
 // overlay from Layout. Replaces the old sidebar-embedded SettingsPanel.
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSettingsStore, type FontSize, type Density, type Theme } from '../stores/settingsStore'
+import { useChatStore } from '../stores/chatStore'
 
 // ─── Known models ─────────────────────────────────────────────────────────────
 
@@ -29,6 +30,9 @@ type SettingsSection =
   | 'appearance'
   | 'privacy'
   | 'usage'
+  | 'connectors'
+  | 'memory'
+  | 'capabilities'
   | 'workspace'
   | 'integrations'
   | 'keybindings'
@@ -511,32 +515,74 @@ function PrivacySection() {
 
 // ─── Section: Usage ───────────────────────────────────────────────────────────
 
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
 function UsageSection() {
-  // Pull real counts from chatStore — lazy imported to avoid circular deps
-  const [stats, setStats] = useState({ convs: 0, msgs: 0 })
-  useEffect(() => {
-    import('../stores/chatStore').then(({ useChatStore }) => {
-      const { conversations } = useChatStore.getState()
-      const convCount = Object.keys(conversations).length
-      const msgCount = Object.values(conversations).reduce(
-        (acc, c) => acc + c.messages.length, 0
-      )
-      setStats({ convs: convCount, msgs: msgCount })
+  const conversations = useChatStore((s) => s.conversations)
+
+  const stats = useMemo(() => {
+    const allMsgs = Object.values(conversations).flatMap((c) => c.messages)
+    const convCount = Object.keys(conversations).length
+    const msgCount = allMsgs.length
+
+    // Weekly bars: last 7 calendar days, count messages per day
+    const now = Date.now()
+    const dayMs = 86_400_000
+    const days: { label: string; count: number }[] = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(now - (6 - i) * dayMs)
+      return { label: DAY_LABELS[d.getDay()], count: 0 }
     })
-  }, [])
+    for (const msg of allMsgs) {
+      const daysAgo = Math.floor((now - msg.timestamp) / dayMs)
+      if (daysAgo >= 0 && daysAgo < 7) {
+        days[6 - daysAgo].count++
+      }
+    }
+    const maxDay = Math.max(...days.map((d) => d.count), 1)
+
+    // Session messages: this session only (approximated as messages in last hour)
+    const sessionMsgs = allMsgs.filter((m) => now - m.timestamp < 3_600_000).length
+
+    return { convCount, msgCount, days, maxDay, sessionMsgs }
+  }, [conversations])
 
   return (
     <div className="flex flex-col gap-8">
       <div>
         <SectionTitle>Usage</SectionTitle>
-        <p className="text-sm text-text-muted">Stats and data management for your conversations.</p>
+        <p className="text-sm text-text-muted">Message activity and data management for your conversations.</p>
       </div>
 
-      <SubSection title="Local Stats">
+      <SubSection title="Activity This Week">
+        {/* Weekly bar chart */}
+        <div className="flex items-end gap-1.5 h-20 px-1">
+          {stats.days.map((day, i) => {
+            const pct = stats.maxDay > 0 ? (day.count / stats.maxDay) * 100 : 0
+            return (
+              <div key={i} className="flex flex-col items-center gap-1 flex-1">
+                <div className="w-full flex flex-col justify-end" style={{ height: '56px' }}>
+                  <div
+                    className="w-full rounded-t-sm bg-accent/40 transition-all duration-300"
+                    style={{ height: `${Math.max(pct, day.count > 0 ? 8 : 2)}%` }}
+                    title={`${day.count} message${day.count !== 1 ? 's' : ''}`}
+                  />
+                </div>
+                <span className="text-[9px] text-text-muted leading-none">{day.label}</span>
+              </div>
+            )
+          })}
+        </div>
+        <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
+          <span>{stats.days.reduce((a, d) => a + d.count, 0)} messages this week</span>
+          <span>{stats.sessionMsgs} this session</span>
+        </div>
+      </SubSection>
+
+      <SubSection title="All-Time Stats">
         <div className="grid grid-cols-2 gap-3">
           {[
-            { label: 'Conversations', value: stats.convs },
-            { label: 'Total messages', value: stats.msgs },
+            { label: 'Conversations', value: stats.convCount },
+            { label: 'Total messages', value: stats.msgCount },
           ].map(({ label, value }) => (
             <div
               key={label}
@@ -548,7 +594,7 @@ function UsageSection() {
           ))}
         </div>
         <p className="text-xs text-text-muted">
-          All data is stored locally. No usage data is sent to any server.
+          All data is stored locally. Nothing is sent to any server beyond the API call itself.
         </p>
       </SubSection>
 
@@ -567,6 +613,280 @@ function UsageSection() {
           >
             Clear all conversations…
           </button>
+        </div>
+      </SubSection>
+    </div>
+  )
+}
+
+// ─── Section: Connectors ──────────────────────────────────────────────────────
+
+interface Connector {
+  id: string
+  name: string
+  desc: string
+  icon: string
+  status: 'connected' | 'disconnected' | 'coming_soon'
+  detail?: string
+}
+
+const DEFAULT_CONNECTORS: Connector[] = [
+  {
+    id: 'browser',
+    name: 'Lumen Browser Extension',
+    desc: 'Control Chrome for web browsing, scraping, and form-filling tasks',
+    icon: '🌐',
+    status: 'disconnected',
+    detail: 'Install the extension from the Chrome Web Store, then open it and click Connect.',
+  },
+  {
+    id: 'google',
+    name: 'Google Drive & Docs',
+    desc: 'Read and write Google Docs, Sheets, and Drive files',
+    icon: '📁',
+    status: 'coming_soon',
+  },
+  {
+    id: 'slack',
+    name: 'Slack',
+    desc: 'Send messages, read channels, and interact with your workspace',
+    icon: '💬',
+    status: 'coming_soon',
+  },
+  {
+    id: 'github',
+    name: 'GitHub',
+    desc: 'Create issues, open PRs, read code, and review repos',
+    icon: '🐙',
+    status: 'coming_soon',
+  },
+  {
+    id: 'notion',
+    name: 'Notion',
+    desc: 'Read and write pages, databases, and blocks in your workspace',
+    icon: '📒',
+    status: 'coming_soon',
+  },
+]
+
+function ConnectorsSection() {
+  const [connectors, setConnectors] = useState<Connector[]>(DEFAULT_CONNECTORS)
+  const [browserConnected, setBrowserConnected] = useState(false)
+
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const status = await window.tower?.getBrowserStatus?.()
+        setBrowserConnected(status?.connected ?? false)
+      } catch { setBrowserConnected(false) }
+    }
+    check()
+    const offOn  = window.tower?.onBrowserConnected?.(() => setBrowserConnected(true))
+    const offOff = window.tower?.onBrowserDisconnected?.(() => setBrowserConnected(false))
+    return () => { offOn?.(); offOff?.() }
+  }, [])
+
+  const resolvedConnectors = connectors.map((c) =>
+    c.id === 'browser' ? { ...c, status: (browserConnected ? 'connected' : 'disconnected') as Connector['status'] } : c
+  )
+
+  const statusBadge = (status: Connector['status']) => {
+    if (status === 'connected')
+      return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-400/15 text-green-400">Connected</span>
+    if (status === 'coming_soon')
+      return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-text-muted/10 text-text-muted">Coming soon</span>
+    return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-text-muted/10 text-text-muted">Not connected</span>
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      <div>
+        <SectionTitle>Connectors</SectionTitle>
+        <p className="text-sm text-text-muted">
+          Connect Lumen to external services so agents can act on your behalf.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {resolvedConnectors.map((c) => (
+          <div
+            key={c.id}
+            className="flex gap-4 p-4 bg-surface border border-border rounded-xl"
+          >
+            <span className="text-xl shrink-0 mt-0.5">{c.icon}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <p className="text-[13px] font-semibold text-text-primary">{c.name}</p>
+                {statusBadge(c.status)}
+              </div>
+              <p className="text-xs text-text-muted mb-2">{c.desc}</p>
+              {c.detail && c.status !== 'coming_soon' && (
+                <p className="text-[11.5px] text-text-secondary mb-2">{c.detail}</p>
+              )}
+              {c.status === 'disconnected' && c.id === 'browser' && (
+                <a
+                  href="chrome://extensions"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-accent hover:underline"
+                >
+                  Open Chrome Extensions →
+                </a>
+              )}
+              {c.status === 'connected' && c.id === 'browser' && (
+                <p className="text-xs text-green-400">Claude can navigate, read, and interact with Chrome.</p>
+              )}
+            </div>
+            {c.status !== 'coming_soon' && (
+              <div className="shrink-0 self-start">
+                {c.status === 'disconnected' ? (
+                  <button
+                    onClick={() => c.id === 'google' && window.tower?.connectGoogle?.()}
+                    className="px-3 py-1.5 rounded-lg bg-accent/10 border border-accent/20 text-xs
+                               text-accent hover:bg-accent/20 transition-colors"
+                  >
+                    Connect
+                  </button>
+                ) : (
+                  <button
+                    className="px-3 py-1.5 rounded-lg border border-border bg-surface text-xs
+                               text-text-muted hover:text-error hover:border-error/30 transition-colors"
+                  >
+                    Disconnect
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Add connector */}
+      <div className="flex flex-col items-center justify-center h-20 gap-2
+                      border border-dashed border-border rounded-xl cursor-default">
+        <p className="text-sm text-text-muted">+ Add connector</p>
+        <p className="text-xs text-text-muted">Custom connector marketplace coming soon</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Section: Memory ─────────────────────────────────────────────────────────
+
+function MemorySection() {
+  const {
+    memorySearchRef, setMemorySearchRef,
+    memoryGenerate,  setMemoryGenerate,
+  } = useSettingsStore()
+
+  return (
+    <div className="flex flex-col gap-8">
+      <div>
+        <SectionTitle>Memory</SectionTitle>
+        <p className="text-sm text-text-muted">
+          Control how Lumen stores and uses context from your conversations.
+        </p>
+      </div>
+
+      <SubSection title="Memory Settings">
+        <div className="flex flex-col divide-y divide-border/60">
+          <div className="py-3">
+            <ToggleRow
+              label="Search & reference memory"
+              desc="Lumen can search saved notes and past context to personalize responses"
+              on={memorySearchRef}
+              onChange={setMemorySearchRef}
+            />
+          </div>
+          <div className="py-3">
+            <ToggleRow
+              label="Generate new memories"
+              desc="Lumen automatically saves key facts and preferences from conversations"
+              on={memoryGenerate}
+              onChange={setMemoryGenerate}
+            />
+          </div>
+        </div>
+        <p className="text-xs text-text-muted">
+          Memory is stored locally and never sent to Anthropic. These controls take effect in future conversations.
+        </p>
+      </SubSection>
+
+      <SubSection title="Saved Memories">
+        <div className="flex flex-col items-center justify-center h-24 gap-2
+                        border border-dashed border-border rounded-xl">
+          <p className="text-sm text-text-muted">No memories saved yet</p>
+          <p className="text-xs text-text-muted">Enable "Generate new memories" above to start building context</p>
+        </div>
+      </SubSection>
+    </div>
+  )
+}
+
+// ─── Section: Capabilities ────────────────────────────────────────────────────
+
+interface CapabilityRow {
+  key: keyof Pick<ReturnType<typeof useSettingsStore.getState>,
+        'capFileRead' | 'capFileWrite' | 'capShellExec' | 'capBrowser' | 'capWebSearch'>
+  setter: keyof Pick<ReturnType<typeof useSettingsStore.getState>,
+          'setCapFileRead' | 'setCapFileWrite' | 'setCapShellExec' | 'setCapBrowser' | 'setCapWebSearch'>
+  label: string
+  desc: string
+  risk: 'low' | 'medium' | 'high'
+}
+
+const CAPABILITY_ROWS: CapabilityRow[] = [
+  { key: 'capFileRead',  setter: 'setCapFileRead',  label: 'Read files',        desc: 'Claude can read files from your filesystem', risk: 'low'    },
+  { key: 'capFileWrite', setter: 'setCapFileWrite', label: 'Write files',       desc: 'Claude can create and modify files',          risk: 'medium' },
+  { key: 'capShellExec', setter: 'setCapShellExec', label: 'Run shell commands',desc: 'Claude can execute terminal commands',        risk: 'high'   },
+  { key: 'capBrowser',   setter: 'setCapBrowser',   label: 'Browser control',   desc: 'Claude can navigate and interact with Chrome', risk: 'medium' },
+  { key: 'capWebSearch', setter: 'setCapWebSearch', label: 'Web search',        desc: 'Claude can search the web for information',   risk: 'low'    },
+]
+
+const RISK_BADGE: Record<'low' | 'medium' | 'high', string> = {
+  low:    'text-green-400/80 bg-green-400/10',
+  medium: 'text-amber-400/80 bg-amber-400/10',
+  high:   'text-error/80 bg-error/10',
+}
+
+function CapabilitiesSection() {
+  const store = useSettingsStore()
+
+  return (
+    <div className="flex flex-col gap-8">
+      <div>
+        <SectionTitle>Capabilities</SectionTitle>
+        <p className="text-sm text-text-muted">
+          Control which tools Lumen agents are allowed to use.
+        </p>
+      </div>
+
+      <SubSection title="Tool Permissions">
+        <div className="flex flex-col divide-y divide-border/60">
+          {CAPABILITY_ROWS.map((cap) => (
+            <div key={cap.key} className="flex items-center justify-between py-3 gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <p className="text-[13px] text-text-primary">{cap.label}</p>
+                  <span className={`text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${RISK_BADGE[cap.risk]}`}>
+                    {cap.risk}
+                  </span>
+                </div>
+                <p className="text-[11.5px] text-text-muted">{cap.desc}</p>
+              </div>
+              <Toggle
+                on={store[cap.key] as boolean}
+                onChange={(v) => (store[cap.setter] as (v: boolean) => void)(v)}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2 p-3 bg-amber-400/5 border border-amber-400/20 rounded-xl">
+          <span className="text-amber-400 text-sm shrink-0">⚠</span>
+          <p className="text-[11.5px] text-amber-400/80 leading-snug">
+            High-risk permissions allow Claude to run commands on your machine.
+            Only enable these if you trust the conversation's context.
+          </p>
         </div>
       </SubSection>
     </div>
@@ -858,6 +1178,9 @@ const NAV_SECTIONS: {
   { id: 'appearance',   label: 'Appearance',     icon: '🎨', group: 'User' },
   { id: 'privacy',      label: 'Privacy',        icon: '🔒', group: 'User' },
   { id: 'usage',        label: 'Usage',          icon: '📊', group: 'User' },
+  { id: 'connectors',   label: 'Connectors',     icon: '🔗', group: 'Lumen' },
+  { id: 'memory',       label: 'Memory',         icon: '🧠', group: 'Lumen' },
+  { id: 'capabilities', label: 'Capabilities',   icon: '🛠️', group: 'Lumen' },
   { id: 'workspace',    label: 'Workspace',      icon: '🗂️',  group: 'Lumen' },
   { id: 'integrations', label: 'Integrations',   icon: '🔌', group: 'Lumen' },
   { id: 'keybindings',  label: 'Keybindings',    icon: '⌨️',  group: 'Lumen' },
@@ -875,6 +1198,9 @@ export function SettingsPage({ onClose }: SettingsPageProps) {
     appearance:   <AppearanceSection />,
     privacy:      <PrivacySection />,
     usage:        <UsageSection />,
+    connectors:   <ConnectorsSection />,
+    memory:       <MemorySection />,
+    capabilities: <CapabilitiesSection />,
     workspace:    <WorkspaceSection />,
     integrations: <IntegrationsSection />,
     keybindings:  <KeybindingsSection />,
