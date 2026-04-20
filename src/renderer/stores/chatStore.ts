@@ -40,7 +40,7 @@ export interface Message {
 // or 'code' (code sessions with shell/grep/git tool access).
 // Field is optional for backward compat with pre-migration stored data;
 // sidebar filtering treats `undefined` as 'chat'.
-export type ConvMode = 'chat' | 'code'
+export type ConvMode = 'chat' | 'code' | 'helm'
 
 export interface Conversation {
   id: string

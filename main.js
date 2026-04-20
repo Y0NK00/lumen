@@ -4,6 +4,7 @@ const fs = require('fs');                          // sync fs — used by readJS
 const { exec, spawn } = require('child_process');
 const { google } = require('googleapis');
 const { WebSocketServer } = require('ws');         // Phase 5: browser extension bridge
+const cron = require('node-cron');                 // Scheduled task execution
  
 let mainWindow;
 let driverView = null;
@@ -151,16 +152,20 @@ browserWSS.on('listening', () => {
 browserWSS.on('connection', (socket) => {
   console.log('[Lumen] Browser extension connected')
   browserExtensionSocket = socket
- 
+  // Notify renderer so StatusWidget can update live
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('browser:connected')
+  }
+
   socket.on('message', (data) => {
     let message
     try { message = JSON.parse(data.toString()) } catch { return }
- 
+
     if (message.type === 'hello') {
       console.log('[Lumen] Extension identified:', message.source)
       return
     }
- 
+
     const { id, success, result, error } = message
     const pending = pendingBrowserCommands.get(id)
     if (pending) {
@@ -172,7 +177,7 @@ browserWSS.on('connection', (socket) => {
       }
     }
   })
- 
+
   socket.on('close', () => {
     console.log('[Lumen] Browser extension disconnected')
     browserExtensionSocket = null
@@ -180,8 +185,12 @@ browserWSS.on('connection', (socket) => {
       pending.reject(new Error('Browser extension disconnected'))
       pendingBrowserCommands.delete(id)
     }
+    // Notify renderer
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('browser:disconnected')
+    }
   })
- 
+
   socket.on('error', (err) => {
     console.error('[Lumen] Browser socket error:', err.message)
   })
@@ -447,11 +456,17 @@ async function executeTool(name, input) {
  
       // ── File system tools ──────────────────────────────────────────────────
       case 'read_file': {
+        if (!isPathAllowed(input.path)) {
+          return { success: false, result: `Access denied: path is outside the active project folder (${activeRootPath})` }
+        }
         const content = await fs.promises.readFile(input.path, 'utf8')
         return { success: true, result: content }
       }
- 
+
       case 'write_file': {
+        if (!isPathAllowed(input.path)) {
+          return { success: false, result: `Access denied: path is outside the active project folder (${activeRootPath})` }
+        }
         let oldContent = null
         try { oldContent = await fs.promises.readFile(input.path, 'utf8') } catch { /* new file */ }
         await fs.promises.writeFile(input.path, input.content, 'utf8')
@@ -462,8 +477,11 @@ async function executeTool(name, input) {
           newContent: input.content,
         }
       }
- 
+
       case 'list_dir': {
+        if (!isPathAllowed(input.path)) {
+          return { success: false, result: `Access denied: path is outside the active project folder (${activeRootPath})` }
+        }
         const entries = await fs.promises.readdir(input.path, { withFileTypes: true })
         if (entries.length === 0) return { success: true, result: '(empty directory)' }
         const lines = entries.map((e) => `${e.isDirectory() ? 'DIR  ' : 'FILE'} ${e.name}`)
@@ -619,7 +637,7 @@ async function executeTool(name, input) {
  
 const claudeStreams = new Map()
  
-ipcMain.on('claude-stream-start', async (event, { requestId, messages, model, apiKey }) => {
+ipcMain.on('claude-stream-start', async (event, { requestId, messages, model, apiKey, systemPrompt }) => {
   const controller = new AbortController()
   claudeStreams.set(requestId, controller)
  
@@ -646,6 +664,7 @@ ipcMain.on('claude-stream-start', async (event, { requestId, messages, model, ap
           max_tokens: 4096,
           stream: true,
           tools: CLAUDE_TOOLS,
+          ...(systemPrompt ? { system: systemPrompt } : {}),
         }),
         signal: controller.signal,
       })
@@ -841,9 +860,160 @@ ipcMain.on('claude-stream-abort', (event, { requestId }) => {
 })
  
 // =============================================================================
+// Settings + project sync
+// Renderer pushes these to main so cron tasks and file tools can use them
+// without needing to round-trip back to the renderer at execution time.
+// =============================================================================
+
+let cronSettings = { apiKey: '', model: 'claude-sonnet-4-5' }
+let activeRootPath = null   // set by project switcher — enforces file tool scope
+
+ipcMain.on('settings:sync', (_, data) => {
+  cronSettings = { ...cronSettings, ...data }
+})
+
+ipcMain.on('project:syncRootPath', (_, rootPath) => {
+  activeRootPath = rootPath || null
+  console.log(`[project] Root path: ${activeRootPath ?? '(none)'}`)
+})
+
+// Path safety check — returns true if filePath is within activeRootPath (if set)
+function isPathAllowed(filePath) {
+  if (!activeRootPath) return true
+  const resolved = path.resolve(filePath)
+  const root = path.resolve(activeRootPath)
+  return resolved === root || resolved.startsWith(root + path.sep)
+}
+
+// =============================================================================
+// Cron: Scheduled task execution
+// Renderer sends tasks via IPC; main process owns the live cron jobs.
+// Supports recurring cadences (node-cron) and one-shot tasks (setTimeout).
+// On fire: calls Claude API directly, sends result back to renderer to create
+// a conversation. Also sends 'cron:task-ran' so lastRunAt stays current.
+// =============================================================================
+
+const cronJobs    = new Map()   // taskId → { job, task }   (recurring)
+const onceTimers  = new Map()   // taskId → { timer, task } (one-shot)
+const taskRegistry = new Map()  // taskId → task            (all registered, for run-now)
+
+const CRON_EXPRESSIONS = {
+  hourly:  '0 * * * *',
+  daily:   '0 9 * * *',    // 9am daily
+  weekly:  '0 9 * * 1',    // 9am Monday
+  monthly: '0 9 1 * *',    // 9am 1st of month
+}
+
+async function cronRunTask(task) {
+  const ranAt = Date.now()
+  console.log(`[cron] Firing: "${task.label}" | ${new Date(ranAt).toLocaleString()}`)
+
+  // Notify renderer so lastRunAt updates immediately
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('cron:task-ran', { taskId: task.id, ranAt })
+  }
+
+  const { apiKey, model } = cronSettings
+  if (!apiKey) {
+    console.warn('[cron] No API key — add a Claude key in Settings to enable execution')
+    return
+  }
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: task.prompt }],
+      }),
+    })
+
+    if (!response.ok) {
+      const errText = await response.text()
+      console.error(`[cron] API error ${response.status}: ${errText}`)
+      return
+    }
+
+    const data = await response.json()
+    const result = data.content?.[0]?.text ?? '(no response)'
+
+    console.log(`[cron] Done: "${task.label}" (${result.length} chars)`)
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('cron:task-result', {
+        taskId: task.id,
+        label:  task.label,
+        prompt: task.prompt,
+        result,
+        ranAt,
+      })
+    }
+  } catch (err) {
+    console.error(`[cron] Execution failed: ${err.message}`)
+  }
+}
+
+function cronRegisterTask(task) {
+  if (!task.enabled) return
+  taskRegistry.set(task.id, task)   // always keep registry current
+
+  if (task.cadence === 'once') {
+    if (!task.scheduledFor) return
+    const delay = task.scheduledFor - Date.now()
+    if (delay <= 0) {
+      console.log(`[cron] Skipping "${task.label}" — scheduled time is in the past`)
+      return
+    }
+    cronUnregisterTask(task.id)
+    const timer = setTimeout(() => {
+      onceTimers.delete(task.id)
+      cronRunTask(task)
+    }, delay)
+    onceTimers.set(task.id, { timer, task })
+    console.log(`[cron] Scheduled once: "${task.label}" at ${new Date(task.scheduledFor).toLocaleString()}`)
+    return
+  }
+
+  const expression = CRON_EXPRESSIONS[task.cadence]
+  if (!expression) return
+  cronUnregisterTask(task.id)
+  const job = cron.schedule(expression, () => cronRunTask(task))
+  cronJobs.set(task.id, { job, task })
+  console.log(`[cron] Registered "${task.label}" (${task.cadence})`)
+}
+
+function cronUnregisterTask(id) {
+  const entry = cronJobs.get(id)
+  if (entry) { entry.job.stop(); cronJobs.delete(id) }
+  const timer = onceTimers.get(id)
+  if (timer) { clearTimeout(timer.timer); onceTimers.delete(id) }
+  taskRegistry.delete(id)
+}
+
+// Run a task immediately on demand (bypasses cadence)
+ipcMain.on('cron:run-now', (_, task) => {
+  console.log(`[cron] Run Now: "${task.label}"`)
+  cronRunTask(task)
+})
+
+ipcMain.on('cron:register',   (_, task)  => cronRegisterTask(task))
+ipcMain.on('cron:unregister', (_, id)    => cronUnregisterTask(id))
+ipcMain.on('cron:sync', (_, tasks) => {
+  for (const id of [...cronJobs.keys(), ...onceTimers.keys()]) cronUnregisterTask(id)
+  tasks.filter(t => t.enabled).forEach(cronRegisterTask)
+  console.log(`[cron] Synced ${tasks.length} task(s)`)
+})
+
+// =============================================================================
 // App lifecycle
 // =============================================================================
- 
+
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
@@ -920,6 +1090,12 @@ ipcMain.handle('data:loadSettings',      () => readJSON(settingsFile, null));
 ipcMain.handle('data:saveSettings',      (_, v) => { writeJSON(settingsFile, v); return true; });
 ipcMain.handle('data:loadConnectors',    () => readJSON(connectorsFile, {}));
 ipcMain.handle('data:saveConnectors',    (_, v) => { writeJSON(connectorsFile, v); return true; });
+
+// ── Browser extension status ──────────────────────────────────────────────────
+// Renderer calls this to check if the extension WS is actually live.
+ipcMain.handle('browser:status', () => ({
+  connected: !!(browserExtensionSocket && browserExtensionSocket.readyState === 1)
+}))
  
 // ── Google OAuth ──
 ipcMain.handle('connect-google', async () => {

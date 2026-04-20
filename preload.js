@@ -40,8 +40,8 @@ contextBridge.exposeInMainWorld('tower', {
   onGoogleError:     (cb) => ipcRenderer.on('google-error', cb),
 
   // ── Claude API streaming ───────────────────────────────────────────────────
-  startClaudeStream: (requestId, messages, model, apiKey) => {
-    ipcRenderer.send('claude-stream-start', { requestId, messages, model, apiKey })
+  startClaudeStream: (requestId, messages, model, apiKey, systemPrompt) => {
+    ipcRenderer.send('claude-stream-start', { requestId, messages, model, apiKey, systemPrompt })
   },
 
   abortClaudeStream: (requestId) => {
@@ -79,6 +79,41 @@ contextBridge.exposeInMainWorld('tower', {
     return () => ipcRenderer.removeListener('claude-tool-result', handler)
   },
 
+  // ── Settings + project sync ────────────────────────────────────────────────
+  // Push live state to main so cron runner + file tools can use it without
+  // needing to round-trip back to the renderer at execution time.
+  syncSettings:  (data)     => ipcRenderer.send('settings:sync', data),
+  syncRootPath:  (rootPath) => ipcRenderer.send('project:syncRootPath', rootPath),
+
+  // ── Browser extension status ──────────────────────────────────────────────
+  getBrowserStatus: () => ipcRenderer.invoke('browser:status'),
+  // Both return a cleanup function so callers can remove listeners on unmount
+  onBrowserConnected: (cb) => {
+    const handler = (_, ...args) => cb(...args)
+    ipcRenderer.on('browser:connected', handler)
+    return () => ipcRenderer.removeListener('browser:connected', handler)
+  },
+  onBrowserDisconnected: (cb) => {
+    const handler = (_, ...args) => cb(...args)
+    ipcRenderer.on('browser:disconnected', handler)
+    return () => ipcRenderer.removeListener('browser:disconnected', handler)
+  },
+
+  // ── Cron: scheduled task bridge ───────────────────────────────────────────
+  cronRegister:   (task)  => ipcRenderer.send('cron:register', task),
+  cronUnregister: (id)    => ipcRenderer.send('cron:unregister', id),
+  cronSync:       (tasks) => ipcRenderer.send('cron:sync', tasks),
+  cronRunNow:     (task)  => ipcRenderer.send('cron:run-now', task),
+  onCronTaskRan: (callback) => {
+    const handler = (_, data) => callback(data)
+    ipcRenderer.on('cron:task-ran', handler)
+    return () => ipcRenderer.removeListener('cron:task-ran', handler)
+  },
+  onCronTaskResult: (callback) => {
+    const handler = (_, data) => callback(data)
+    ipcRenderer.on('cron:task-result', handler)
+    return () => ipcRenderer.removeListener('cron:task-result', handler)
+  },
 
   // ── AI Driver BrowserView ──────────────────────────────────────────────────
   driver: {

@@ -11,10 +11,12 @@
 // persistently. Service workers go dormant; this document doesn't.
 // =============================================================================
 
-// Primary server: Unraid (always on). Falls back to localhost (Electron app on PC).
+// Try localhost (Electron app on same PC) first, then tower.local (Unraid / remote).
+// Localhost first ensures local dev always connects to the running Lumen instance
+// rather than accidentally connecting to a remote server on the same port.
 const SERVERS = [
-  'ws://tower.local:7745',
   'ws://localhost:7745',
+  'ws://tower.local:7745',
 ]
 const RECONNECT_DELAY_MS = 3000
 

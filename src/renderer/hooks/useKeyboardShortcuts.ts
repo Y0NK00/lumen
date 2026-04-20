@@ -20,6 +20,7 @@
 import { useEffect } from 'react'
 import { useChatStore } from '../stores/chatStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useProjectsStore } from '../stores/projectsStore'
 import { useUIStore, type AppMode } from '../stores/uiStore'
 
 export const SIDEBAR_FOCUS_SEARCH_EVENT = 'lumen:focus-sidebar-search'
@@ -58,16 +59,17 @@ export function useKeyboardShortcuts() {
       // Everything else is blocked while typing.
       if (inEditable) return
 
-      // Ctrl+N → new conversation in current mode
+      // Ctrl+N → new conversation in current mode, scoped to active project
       if (e.key.toLowerCase() === 'n') {
         e.preventDefault()
         const { mode } = useUIStore.getState()
         const { defaultProvider, defaultClaudeModel, defaultOllamaModel } = useSettingsStore.getState()
+        const { activeProjectId } = useProjectsStore.getState()
         const model = defaultProvider === 'claude' ? defaultClaudeModel : defaultOllamaModel
         const convMode = mode === 'code' ? 'code' : 'chat'
         // Helm mode has no conversation concept yet — fall back to Chat.
         if (mode === 'helm') useUIStore.getState().setMode('chat')
-        useChatStore.getState().createConversation(model, convMode)
+        useChatStore.getState().createConversation(model, convMode, activeProjectId ?? undefined)
         return
       }
 

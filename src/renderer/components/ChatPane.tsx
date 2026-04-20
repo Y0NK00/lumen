@@ -2,6 +2,7 @@ import { useChatStore } from '../stores/chatStore'
 import { useOllamaStream } from '../hooks/useOllamaStream'
 import { useClaudeStream } from '../hooks/useClaudeStream'
 import { useSettingsStore, isClaudeModel } from '../stores/settingsStore'
+import { useProjectsStore } from '../stores/projectsStore'
 import { useUIStore } from '../stores/uiStore'
 import { MessageList } from './MessageList'
 import { InputBox } from './InputBox'
@@ -38,12 +39,13 @@ function extractArtifactsFromMessages(messages: Message[]): ExtractedArtifact[] 
 function NoConversationSelected() {
   const { createConversation } = useChatStore()
   const { defaultProvider, defaultClaudeModel, defaultOllamaModel } = useSettingsStore()
+  const { activeProjectId } = useProjectsStore()
   const { mode } = useUIStore()
   const isCode = mode === 'code'
 
   const handleNew = () => {
     const model = defaultProvider === 'claude' ? defaultClaudeModel : defaultOllamaModel
-    createConversation(model, isCode ? 'code' : 'chat')
+    createConversation(model, isCode ? 'code' : 'chat', activeProjectId ?? undefined)
   }
 
   return (
@@ -134,7 +136,7 @@ function useActiveStream(model: string) {
 
 export function ChatPane() {
   const { conversations, activeConversationId } = useChatStore()
-  const { mode } = useUIStore()
+  const { mode, pendingDispatch, setPendingDispatch } = useUIStore()
   const rawConv = activeConversationId ? conversations[activeConversationId] : null
 
   // Mode guard: if the active conversation belongs to a different mode than
@@ -144,6 +146,19 @@ export function ChatPane() {
   const conv = rawConv && (rawConv.mode ?? 'chat') === currentConvMode ? rawConv : null
 
   const { sendMessage, stopStream, isStreaming } = useActiveStream(conv?.model ?? '')
+
+  // ── Pending dispatch consumer (Chat mode only) ─────────────────────────────
+  // HelmChatView is the primary consumer of pendingDispatch when mode === 'helm'.
+  // This effect is a fallback for cases where mode has been explicitly set to
+  // 'chat' before the dispatch fires (e.g. future direct-chat dispatch paths).
+  useEffect(() => {
+    if (mode !== 'chat') return
+    if (pendingDispatch && conv && !isStreaming) {
+      const prompt = pendingDispatch
+      setPendingDispatch(null)
+      sendMessage(prompt)
+    }
+  }, [mode, pendingDispatch, conv, isStreaming, sendMessage, setPendingDispatch])
 
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null)
   const [artifactsToast, setArtifactsToast] = useState<string | null>(null)

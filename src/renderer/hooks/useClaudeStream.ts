@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { useChatStore } from '../stores/chatStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useProjectsStore } from '../stores/projectsStore'
 import type { Message, ToolCall } from '../stores/chatStore'
 
 // ─── Window type augmentation ─────────────────────────────────────────────────
@@ -15,7 +16,8 @@ declare global {
         requestId: string,
         messages: Array<{ role: string; content: string }>,
         model: string,
-        apiKey: string
+        apiKey: string,
+        systemPrompt?: string
       ) => void
       abortClaudeStream: (requestId: string) => void
       onClaudeChunk: (
@@ -65,11 +67,33 @@ declare global {
       onWindowMaximized?: (cb: (e: unknown, maximized: boolean) => void) => void
       offWindowMaximized?: (cb: (e: unknown, maximized: boolean) => void) => void
 
+      // ── Settings + project sync ───────────────────────────────────────────────
+      syncSettings:  (data: { apiKey: string; model: string }) => void
+      syncRootPath:  (rootPath: string | null) => void
+
+      // ── Cron bridge ───────────────────────────────────────────────────────────
+      cronRegister:   (task: { id: string; label: string; prompt: string; cadence: string; enabled: boolean; scheduledFor?: number }) => void
+      cronUnregister: (id: string) => void
+      cronSync:       (tasks: Array<{ id: string; label: string; prompt: string; cadence: string; enabled: boolean; scheduledFor?: number }>) => void
+      cronRunNow:     (task: { id: string; label: string; prompt: string; cadence: string; enabled: boolean; scheduledFor?: number }) => void
+      onCronTaskRan:     (callback: (data: { taskId: string; ranAt: number }) => void) => () => void
+      onCronTaskResult:  (callback: (data: { taskId: string; label: string; prompt: string; result: string; ranAt: number }) => void) => () => void
+
       // ── Multi-window ─────────────────────────────────────────────────────────
       openConversationWindow?: (conversationId: string) => void
 
       // ── Dialogs ───────────────────────────────────────────────────────────────
       openFolderDialog?: () => Promise<string | null>
+
+      // ── Browser extension status ──────────────────────────────────────────────
+      getBrowserStatus?:      () => Promise<{ connected: boolean }>
+      onBrowserConnected?:    (cb: () => void) => (() => void) | void
+      onBrowserDisconnected?: (cb: () => void) => (() => void) | void
+
+      // ── Google OAuth ──────────────────────────────────────────────────────────
+      connectGoogle?:     () => Promise<void>
+      onGoogleConnected?: (cb: (e: unknown, connected: boolean) => void) => void
+      onGoogleError?:     (cb: (e: unknown, message: string) => void) => void
     }
   }
 }
@@ -103,6 +127,13 @@ export function useClaudeStream(): UseClaudeStreamReturn {
 
       const conv = store.conversations[activeConversationId]
       if (!conv) return
+
+      // ── Project context ──────────────────────────────────────────────────────
+      // If the active project has a system prompt, pass it to the API so it
+      // applies to every turn in this conversation.
+      const { projects, activeProjectId } = useProjectsStore.getState()
+      const activeProject = activeProjectId ? projects[activeProjectId] : null
+      const systemPrompt = activeProject?.systemPrompt?.trim() || undefined
 
       // ── Build message history ────────────────────────────────────────────────
       // Only finalized messages. main.js handles the full tool_result history
@@ -237,7 +268,7 @@ export function useClaudeStream(): UseClaudeStreamReturn {
         // ── Fire ───────────────────────────────────────────────────────────────
         // main.js runs the entire agent loop from here.
         // We just wait for events and update the UI as they arrive.
-        window.tower.startClaudeStream(requestId, history, conv.model, claudeApiKey)
+        window.tower.startClaudeStream(requestId, history, conv.model, claudeApiKey, systemPrompt)
       })
 
       setIsStreaming(false)

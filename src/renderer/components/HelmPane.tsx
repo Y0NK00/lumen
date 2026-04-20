@@ -3,9 +3,11 @@
 // Left panel: Progress, Working Folders, Context widgets.
 // Right area: content for selected nav item.
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useUIStore } from '../stores/uiStore'
 import { useChatStore } from '../stores/chatStore'
+import { useSettingsStore } from '../stores/settingsStore'
+import { useProjectsStore } from '../stores/projectsStore'
 import {
   useHelmStore,
   CADENCE_LABELS,
@@ -13,40 +15,94 @@ import {
   type Cadence,
   type AgentId,
 } from '../stores/helmStore'
+import { classifyPrompt } from '../utils/classifyPrompt'
+import { useClaudeStream } from '../hooks/useClaudeStream'
+import { MessageList } from './MessageList'
+import { InputBox } from './InputBox'
 
 // ─── Widget: Progress ─────────────────────────────────────────────────────────
-
-interface Task {
-  id: string
-  label: string
-  status: 'running' | 'queued' | 'done' | 'failed'
-  model?: string
-}
+// Shows the active Helm conversation's tool-call steps as a live checklist,
+// plus a summary row for each dispatched task in the log.
 
 function ProgressWidget() {
-  // Placeholder — will hook into a task store once Helm tasks are implemented
-  const tasks: Task[] = []
+  const dispatchLog = useUIStore((s) => s.dispatchLog)
+  const helmConvId  = useUIStore((s) => s.helmConvId)
+  const conversations = useChatStore((s) => s.conversations)
+
+  // Collect tool calls from the active Helm conversation for the step checklist
+  const activeConv = helmConvId ? conversations[helmConvId] : null
+  const toolSteps = activeConv
+    ? activeConv.messages.flatMap((m) => m.toolCalls ?? [])
+    : []
+  const isRunning = activeConv?.messages.some((m) => m.isStreaming) ?? false
+
+  const hasAnything = toolSteps.length > 0 || dispatchLog.length > 0
 
   return (
     <div className="flex flex-col gap-1.5">
       <p className="text-[10px] font-semibold text-text-muted uppercase tracking-widest">Progress</p>
-      {tasks.length === 0 ? (
+
+      {/* Live step checklist for the active conversation */}
+      {toolSteps.length > 0 && (
+        <div className="flex flex-col gap-1 pb-1">
+          {toolSteps.map((tc) => (
+            <div key={tc.id} className="flex items-center gap-1.5 min-w-0">
+              {tc.status === 'running' ? (
+                <span className="w-3 h-3 shrink-0 flex items-center justify-center">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                </span>
+              ) : tc.status === 'done' ? (
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0 text-green-400">
+                  <path d="M2 6l2.5 2.5L10 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0 text-error">
+                  <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+              )}
+              <p className="text-[10px] text-text-secondary truncate">
+                {tc.name.replace(/_/g, ' ')}
+              </p>
+            </div>
+          ))}
+          {isRunning && toolSteps.every((t) => t.status !== 'running') && (
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0" />
+              <p className="text-[10px] text-accent">thinking…</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Summary rows for dispatched tasks */}
+      {dispatchLog.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {dispatchLog.map((record) => {
+            const conv    = conversations[record.convId]
+            const running = conv?.messages.some((m) => m.isStreaming) ?? false
+            const done    = conv && conv.messages.length >= 2 && !running
+            return (
+              <div key={record.id} className="flex items-start gap-2 py-0.5">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1 ${
+                  running ? 'bg-accent animate-pulse' :
+                  done    ? 'bg-green-400'            : 'bg-text-muted'
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] text-text-primary truncate">
+                    {record.prompt.length > 36 ? record.prompt.slice(0, 36) + '…' : record.prompt}
+                  </p>
+                  <p className="text-[10px] text-text-muted">
+                    {running ? 'running' : done ? 'done' : 'queued'}
+                  </p>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {!hasAnything && (
         <p className="text-xs text-text-muted italic">No active tasks</p>
-      ) : (
-        tasks.map((t) => (
-          <div key={t.id} className="flex items-center gap-2 py-1">
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-              t.status === 'running' ? 'bg-accent animate-pulse' :
-              t.status === 'queued'  ? 'bg-text-muted' :
-              t.status === 'done'    ? 'bg-green-400' :
-                                       'bg-error'
-            }`} />
-            <span className="text-xs text-text-primary truncate">{t.label}</span>
-            {t.model && (
-              <span className="text-[10px] text-text-muted font-mono ml-auto shrink-0">{t.model}</span>
-            )}
-          </div>
-        ))
       )}
     </div>
   )
@@ -133,19 +189,189 @@ function ContextWidget() {
   )
 }
 
+// ─── Widget: Status ───────────────────────────────────────────────────────────
+
+function StatusWidget() {
+  const claudeApiKey = useSettingsStore((s) => s.claudeApiKey)
+  const { projects, activeProjectId } = useProjectsStore()
+  const activeProject = activeProjectId ? projects[activeProjectId] : null
+  const hasKey = !!claudeApiKey
+  const [browserConnected, setBrowserConnected] = useState(false)
+
+  // Poll / listen for browser extension connection status
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const status = await window.tower?.getBrowserStatus?.()
+        setBrowserConnected(status?.connected ?? false)
+      } catch { setBrowserConnected(false) }
+    }
+    check()
+    // Both calls return a cleanup fn — collect them for unmount
+    const offConnect    = window.tower?.onBrowserConnected?.(() => setBrowserConnected(true))
+    const offDisconnect = window.tower?.onBrowserDisconnected?.(() => setBrowserConnected(false))
+    // Fallback poll every 5s in case events are missed
+    const t = setInterval(check, 5000)
+    return () => { clearInterval(t); offConnect?.(); offDisconnect?.() }
+  }, [])
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-[10px] font-semibold text-text-muted uppercase tracking-widest">Status</p>
+      <div className="flex items-center gap-2">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${hasKey ? 'bg-green-400' : 'bg-error'}`} />
+        <span className="text-xs text-text-secondary">
+          {hasKey ? 'Claude connected' : 'No API key set'}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${browserConnected ? 'bg-green-400' : 'bg-text-muted'}`} />
+        <span className="text-xs text-text-secondary">
+          {browserConnected ? 'Browser connected' : 'Browser not connected'}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeProject ? 'bg-accent' : 'bg-text-muted'}`} />
+        <span className="text-xs text-text-secondary truncate">
+          {activeProject
+            ? `${activeProject.emoji ?? '◫'} ${activeProject.name}`
+            : 'No project active'}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // ─── Right panel (pinned widgets) ─────────────────────────────────────────────
 
 function RightPanel() {
   return (
-    <aside className="w-[220px] shrink-0 flex flex-col border-l border-border bg-sidebar overflow-y-auto">
-      <div className="px-4 pt-5 pb-4 flex flex-col gap-4">
-        <ProgressWidget />
-        <div className="border-t border-border" />
-        <WorkingFoldersWidget />
-        <div className="border-t border-border" />
-        <ContextWidget />
+    <aside className="w-[230px] shrink-0 flex flex-col border-l border-border bg-sidebar overflow-hidden">
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="pl-4 pr-4 pt-5 pb-4 flex flex-col gap-4">
+          <StatusWidget />
+          <div className="border-t border-border" />
+          <ProgressWidget />
+          <div className="border-t border-border" />
+          <WorkingFoldersWidget />
+          <div className="border-t border-border" />
+          <ContextWidget />
+        </div>
       </div>
     </aside>
+  )
+}
+
+// ─── Helm direct chat (default entry point) ──────────────────────────────────
+// Shown when helmNav === 'chat' and no conversation is active yet.
+// First message auto-creates a conversation and transitions to HelmChatView.
+
+function HelmChatContent() {
+  const setHelmConvId = useUIStore((s) => s.setHelmConvId)
+  const setPendingDispatch = useUIStore((s) => s.setPendingDispatch)
+
+  const handleSend = (text: string) => {
+    const { defaultProvider, defaultClaudeModel, defaultOllamaModel } = useSettingsStore.getState()
+    const { activeProjectId } = useProjectsStore.getState()
+    const model = defaultProvider === 'claude' ? defaultClaudeModel : defaultOllamaModel
+    // createConversation also sets activeConversationId in chatStore
+    const convId = useChatStore.getState().createConversation(model, 'helm', activeProjectId ?? undefined)
+    setHelmConvId(convId)
+    setPendingDispatch(text)
+  }
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Empty state — flex column with items-center reliably centers here */}
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8">
+        <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+          <span className="text-2xl">⚡</span>
+        </div>
+        <div>
+          <h2 className="text-base font-semibold text-text-primary mb-1">Helm</h2>
+          <p className="text-xs text-text-muted max-w-sm">
+            Direct chat with full tool access. Complex tasks, file operations, shell commands.
+            Use the sidebar to schedule recurring tasks or route to specialized agents.
+          </p>
+        </div>
+      </div>
+      {/* Input — InputBox self-centers via its own max-w-[840px] mx-auto */}
+      <div className="shrink-0 border-t border-border bg-background/50">
+        <InputBox onSend={handleSend} onStop={() => {}} isStreaming={false} />
+      </div>
+    </div>
+  )
+}
+
+// ─── Helm inline chat view ───────────────────────────────────────────────────
+// Shown whenever helmConvId is set — either from a direct chat message or a
+// structured task dispatch. Stays entirely within Helm mode.
+
+function HelmChatView() {
+  const helmConvId = useUIStore((s) => s.helmConvId)
+  const setHelmConvId = useUIStore((s) => s.setHelmConvId)
+  const setHelmNav = useUIStore((s) => s.setHelmNav)
+  const pendingDispatch = useUIStore((s) => s.pendingDispatch)
+  const setPendingDispatch = useUIStore((s) => s.setPendingDispatch)
+  const conversations = useChatStore((s) => s.conversations)
+
+  const conv = helmConvId ? conversations[helmConvId] : null
+  const { sendMessage, stopStream, isStreaming } = useClaudeStream()
+
+  // Track the exact dispatch string we've already consumed. This prevents
+  // React StrictMode's double-invoke from firing sendMessage twice with the
+  // same prompt — the ref persists across the double-run while state doesn't.
+  const consumedDispatchRef = useRef<string | null>(null)
+
+  // Auto-send a dispatched or first-message prompt once the conv is live
+  useEffect(() => {
+    if (!pendingDispatch || !conv || isStreaming) return
+    if (consumedDispatchRef.current === pendingDispatch) return   // already consumed
+    consumedDispatchRef.current = pendingDispatch
+    const prompt = pendingDispatch
+    setPendingDispatch(null)
+    sendMessage(prompt)
+  }, [pendingDispatch, conv, isStreaming, sendMessage, setPendingDispatch])
+
+  if (!conv) return null
+
+  const handleBack = () => {
+    setHelmConvId(null)
+    setHelmNav('chat')
+  }
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Header */}
+      <div className="flex items-center gap-2.5 px-5 py-2.5 border-b border-border shrink-0">
+        <button
+          onClick={handleBack}
+          className="w-6 h-6 flex items-center justify-center rounded text-text-muted
+                     hover:text-text-primary hover:bg-surface-hover transition-colors shrink-0"
+          title="New chat"
+        >
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8.5 2L4 6.5l4.5 4.5" />
+          </svg>
+        </button>
+        <p className="text-sm font-medium text-text-primary truncate flex-1">{conv.title}</p>
+        {isStreaming && (
+          <span className="text-[10px] text-accent font-medium animate-pulse shrink-0">running…</span>
+        )}
+      </div>
+
+      {/* Messages — centered column matches InputBox's max-w-[840px] */}
+      <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col w-full max-w-[840px] mx-auto">
+          <MessageList messages={conv.messages} />
+        </div>
+      </div>
+
+      {/* Input — InputBox self-centers via its own max-w-[840px] mx-auto */}
+      <div className="shrink-0 border-t border-border bg-background/50">
+        <InputBox onSend={sendMessage} onStop={stopStream} isStreaming={isStreaming} />
+      </div>
+    </div>
   )
 }
 
@@ -198,44 +424,58 @@ function CustomSelect({
 
 // ─── Content areas ────────────────────────────────────────────────────────────
 
-// Super-lightweight auto-routing heuristic for "Claude (Auto)". It's not
-// trying to be smart — it just picks the best-fit enabled agent based on
-// keywords. A real router will replace this when execution lands.
-function classifyPrompt(prompt: string): AgentId {
-  const p = prompt.toLowerCase()
-  if (/\b(shell|bash|grep|git|compile|build|refactor|npm|pip|deploy|code|script|debug)\b/.test(p)) return 'code'
-  if (/\b(research|search|summarize|compare|find out|look up|news|article|web)\b/.test(p))         return 'research'
-  if (/\b(file|folder|organize|rename|move|copy|read|write|delete|clean up)\b/.test(p))            return 'file'
-  if (/\b(schedule|every|daily|weekly|cron|recurring|remind)\b/.test(p))                           return 'schedule'
-  return 'code' // sensible default — most workflows are code-adjacent
-}
-
 function NewTaskContent() {
   const [prompt, setPrompt] = useState('')
   const [agent, setAgent] = useState('Claude (Auto)')
   const [priority, setPriority] = useState('Normal')
   const [lastDispatch, setLastDispatch] = useState<string | null>(null)
+  const [dispatching, setDispatching] = useState(false)
 
   const agents = useHelmStore((s) => s.agents)
   const incrementAgentRouteCount = useHelmStore((s) => s.incrementAgentRouteCount)
   const setHelmNav = useUIStore((s) => s.setHelmNav)
+  const addDispatch = useUIStore((s) => s.addDispatch)
+  const setPendingDispatch = useUIStore((s) => s.setPendingDispatch)
+  const setHelmConvId = useUIStore((s) => s.setHelmConvId)
 
-  const dispatch = () => {
-    if (!prompt.trim()) return
-    // Only auto-route through enabled agents. If the picked agent is disabled,
-    // fall back to the first enabled one; if none, degrade gracefully.
-    const picked = classifyPrompt(prompt)
-    const enabledIds = (Object.keys(agents) as AgentId[]).filter((id) => agents[id].enabled)
-    const target: AgentId | null =
-      agents[picked].enabled ? picked : (enabledIds[0] ?? null)
+  const dispatch = async () => {
+    if (!prompt.trim() || dispatching) return
+    setDispatching(true)
+    try {
+      // classifyPrompt uses LLM (haiku) when a key is set, regex fallback otherwise.
+      const target = await classifyPrompt(prompt)
+      const enabledIds = (Object.keys(agents) as AgentId[]).filter((id) => agents[id].enabled)
+      const resolved: AgentId | null = agents[target]?.enabled ? target : (enabledIds[0] ?? null)
 
-    if (target) {
-      incrementAgentRouteCount(target)
-      setLastDispatch(AGENT_META[target].name)
-    } else {
-      setLastDispatch('No enabled agents — open Dispatch to enable one')
+      if (resolved) {
+        incrementAgentRouteCount(resolved)
+        setLastDispatch(AGENT_META[resolved].name)
+
+        // Create a conversation for this task — stays in Helm mode, shown inline
+        const { defaultProvider, defaultClaudeModel, defaultOllamaModel } = useSettingsStore.getState()
+        const { activeProjectId } = useProjectsStore.getState()
+        const model = defaultProvider === 'claude' ? defaultClaudeModel : defaultOllamaModel
+        const convId = useChatStore.getState().createConversation(model, 'helm', activeProjectId ?? undefined)
+
+        // Log to Progress widget + dispatch history
+        addDispatch({
+          id:        crypto.randomUUID(),
+          prompt:    prompt.trim(),
+          agentName: AGENT_META[resolved].name,
+          convId,
+          createdAt: Date.now(),
+        })
+
+        // Show conversation in Helm center and trigger auto-send
+        setHelmConvId(convId)
+        setPendingDispatch(prompt.trim())
+      } else {
+        setLastDispatch('No enabled agents — open Dispatch to enable one')
+      }
+      setPrompt('')
+    } finally {
+      setDispatching(false)
     }
-    setPrompt('')
   }
 
   return (
@@ -284,13 +524,13 @@ function NewTaskContent() {
 
       <div className="flex items-center gap-2">
         <button
-          disabled={!prompt.trim()}
+          disabled={!prompt.trim() || dispatching}
           onClick={dispatch}
           className="px-5 py-2 rounded-xl bg-accent text-white text-sm font-medium
                      hover:bg-accent-hover transition-colors active:scale-95
                      disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Dispatch Task
+          {dispatching ? 'Routing…' : 'Dispatch Task'}
         </button>
         {prompt && (
           <button
@@ -330,6 +570,29 @@ function ProjectsContent() {
   )
 }
 
+// Format a unix ms timestamp as a relative "X ago" string
+function timeAgo(ms: number): string {
+  const diff = Date.now() - ms
+  if (diff < 60_000)  return 'just now'
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+  return `${Math.floor(diff / 86_400_000)}d ago`
+}
+
+// Convert a datetime-local string ("2026-04-19T14:30") to unix ms, or undefined
+function parseLocalDateTime(value: string): number | undefined {
+  if (!value) return undefined
+  const ms = new Date(value).getTime()
+  return isNaN(ms) ? undefined : ms
+}
+
+// Format unix ms as a datetime-local input value
+function toLocalDateTimeValue(ms?: number): string {
+  if (!ms) return ''
+  const d = new Date(ms - new Date().getTimezoneOffset() * 60_000)
+  return d.toISOString().slice(0, 16)
+}
+
 function ScheduledContent() {
   const scheduledTasks = useHelmStore((s) => s.scheduledTasks)
   const createScheduledTask = useHelmStore((s) => s.createScheduledTask)
@@ -340,6 +603,7 @@ function ScheduledContent() {
   const [label, setLabel] = useState('')
   const [prompt, setPrompt] = useState('')
   const [cadence, setCadence] = useState<Cadence>('daily')
+  const [scheduledForStr, setScheduledForStr] = useState('')
 
   // Sort: enabled first (so disabled ones drop to bottom), then newest first.
   const sorted = useMemo(() => {
@@ -349,14 +613,22 @@ function ScheduledContent() {
     })
   }, [scheduledTasks])
 
-  const canSave = label.trim().length > 0 && prompt.trim().length > 0
+  const scheduledFor = parseLocalDateTime(scheduledForStr)
+  const onceValid = cadence !== 'once' || (!!scheduledFor && scheduledFor > Date.now())
+  const canSave = label.trim().length > 0 && prompt.trim().length > 0 && onceValid
 
   const save = () => {
     if (!canSave) return
-    createScheduledTask({ label: label.trim(), prompt: prompt.trim(), cadence })
+    createScheduledTask({
+      label: label.trim(),
+      prompt: prompt.trim(),
+      cadence,
+      ...(cadence === 'once' && scheduledFor ? { scheduledFor } : {}),
+    })
     setLabel('')
     setPrompt('')
     setCadence('daily')
+    setScheduledForStr('')
     setShowForm(false)
   }
 
@@ -415,6 +687,23 @@ function ScheduledContent() {
               options={Object.values(CADENCE_LABELS)}
             />
           </div>
+          {cadence === 'once' && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Run at</label>
+              <input
+                type="datetime-local"
+                value={scheduledForStr}
+                onChange={(e) => setScheduledForStr(e.target.value)}
+                min={toLocalDateTimeValue(Date.now())}
+                className="w-full bg-background border border-border rounded-lg px-3 py-2
+                           text-sm text-text-primary focus:outline-none focus:border-accent/40
+                           transition-colors [color-scheme:dark]"
+              />
+              {scheduledForStr && scheduledFor && scheduledFor <= Date.now() && (
+                <p className="text-[11px] text-error">Pick a future date and time</p>
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-2 pt-1">
             <button
               disabled={!canSave}
@@ -426,7 +715,7 @@ function ScheduledContent() {
               Save Task
             </button>
             <button
-              onClick={() => { setShowForm(false); setLabel(''); setPrompt('') }}
+              onClick={() => { setShowForm(false); setLabel(''); setPrompt(''); setScheduledForStr('') }}
               className="px-3 py-1.5 rounded-lg text-xs text-text-muted hover:text-text-primary transition-colors"
             >
               Cancel
@@ -469,13 +758,34 @@ function ScheduledContent() {
                   </span>
                 </div>
                 <p className="text-xs text-text-muted truncate">{t.prompt}</p>
+                <p className="text-[10px] text-text-muted mt-0.5">
+                  {t.lastRunAt
+                    ? `Last run: ${timeAgo(t.lastRunAt)}`
+                    : t.cadence === 'once' && t.scheduledFor
+                      ? `Scheduled: ${new Date(t.scheduledFor).toLocaleString()}`
+                      : 'Never run'}
+                </p>
               </div>
+              {/* Run now — fires the task immediately via cron bridge */}
+              <button
+                onClick={() => window.tower.cronRunNow(t)}
+                className="w-6 h-6 flex items-center justify-center rounded text-text-muted
+                           hover:text-accent hover:bg-accent/10 transition-all shrink-0"
+                title="Run now"
+              >
+                <svg width="9" height="10" viewBox="0 0 9 10" fill="currentColor">
+                  <path d="M1 1.5v7l7-3.5L1 1.5z" />
+                </svg>
+              </button>
               <button
                 onClick={() => deleteScheduledTask(t.id)}
-                className="text-text-muted hover:text-error transition-colors text-sm shrink-0"
+                className="w-6 h-6 flex items-center justify-center rounded text-text-muted
+                           hover:text-error hover:bg-error/10 transition-all shrink-0"
                 title="Delete"
               >
-                ×
+                <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <line x1="1" y1="1" x2="7" y2="7" /><line x1="7" y1="1" x2="1" y2="7" />
+                </svg>
               </button>
             </div>
           ))}
@@ -575,23 +885,40 @@ function DispatchContent() {
 
 export function HelmPane() {
   const { helmNav } = useUIStore()
+  const helmConvId = useUIStore((s) => s.helmConvId)
 
-  const content = {
+  const formContent = ({
+    'chat':      null, // handled above by isChatView
     'new-task':  <NewTaskContent />,
     'projects':  <ProjectsContent />,
     'scheduled': <ScheduledContent />,
     'customize': <CustomizeContent />,
     'dispatch':  <DispatchContent />,
-  }[helmNav]
+  } as Record<string, React.ReactNode>)[helmNav]
 
   return (
     <div className="flex h-full overflow-hidden">
-      <div className="flex-1 overflow-y-auto min-w-0">
-        {/* Centering wrapper — content's max-w-xl now sits in the middle of
-            the available space instead of hugging the left edge. */}
-        <div className="flex justify-center px-8 py-6">
-          {content}
-        </div>
+      {/*
+        Center column: flex-col gives a proper containing block so that
+        centering works correctly in all child views.
+        — Chat/conv views fill the column directly (h-full chain works)
+        — Form views scroll inside a flex-1 child; centering uses a separate
+          inner wrapper (flex justify-center) so overflow never interferes.
+      */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {helmConvId ? (
+          <HelmChatView />
+        ) : helmNav === 'chat' ? (
+          <HelmChatContent />
+        ) : (
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="flex justify-center px-6 py-6">
+              <div className="w-full max-w-xl min-w-0">
+                {formContent}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       <RightPanel />
     </div>

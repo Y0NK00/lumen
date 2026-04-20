@@ -3,20 +3,26 @@ import type { Message } from '../stores/chatStore'
 import { ToolCallCard } from './ToolCallCard'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { ThinkingBlock, extractThinkingFromMessage } from './ThinkingBlock'
+import { useSettingsStore } from '../stores/settingsStore'
+
+// Density → bottom margin per message bubble
+const DENSITY_MB = { compact: 'mb-2', comfortable: 'mb-5', spacious: 'mb-9' } as const
 
 // ─── Single message bubble ────────────────────────────────────────────────────
 
 interface MessageBubbleProps {
   message: Message
-  onOpenInArtifacts: (code: string, language: string) => void
+  onOpenInArtifacts?: (code: string, language: string) => void
 }
 
 function MessageBubble({ message, onOpenInArtifacts }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const isEmpty = !message.content && message.isStreaming && !message.toolCalls?.length
+  const density = useSettingsStore((s) => s.density)
+  const mb = DENSITY_MB[density]
 
   return (
-    <div className={`flex w-full min-w-0 ${isUser ? 'justify-end' : 'justify-start'} mb-5 message-enter`}>
+    <div className={`flex w-full min-w-0 ${isUser ? 'justify-end' : 'justify-start'} ${mb} message-enter`}>
 
       {/* Assistant avatar */}
       {!isUser && (
@@ -106,7 +112,7 @@ function ThinkingIndicator() {
 
 interface MessageListProps {
   messages: Message[]
-  onOpenInArtifacts: (code: string, language: string) => void
+  onOpenInArtifacts?: (code: string, language: string) => void
 }
 
 export function MessageList({ messages, onOpenInArtifacts }: MessageListProps) {

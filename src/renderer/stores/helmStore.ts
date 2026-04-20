@@ -15,6 +15,25 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+// ─── Cron IPC helper ──────────────────────────────────────────────────────────
+// Thin wrapper so store actions can notify the main-process cron runner without
+// importing the full window type. Falls back silently if preload isn't loaded.
+
+type CronTask = { id: string; label: string; prompt: string; cadence: string; enabled: boolean }
+
+function cronSend(action: 'register' | 'unregister' | 'sync', data: CronTask | string | CronTask[]) {
+  if (typeof window === 'undefined') return
+  const t = (window as Window & { tower?: {
+    cronRegister?:   (task: CronTask) => void
+    cronUnregister?: (id: string) => void
+    cronSync?:       (tasks: CronTask[]) => void
+  } }).tower
+  if (!t) return
+  if (action === 'register'   && t.cronRegister)   t.cronRegister(data as CronTask)
+  if (action === 'unregister' && t.cronUnregister) t.cronUnregister(data as string)
+  if (action === 'sync'       && t.cronSync)       t.cronSync(data as CronTask[])
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Cadence = 'once' | 'hourly' | 'daily' | 'weekly' | 'monthly'
@@ -28,6 +47,7 @@ export interface ScheduledTask {
   createdAt: number
   lastRunAt?: number
   nextRunAt?: number         // optional — computed by a future runner
+  scheduledFor?: number      // for cadence='once': unix ms timestamp of when to fire
 }
 
 // Agents are preconfigured archetypes (not user-created yet). The store tracks
@@ -67,7 +87,7 @@ const DEFAULT_AGENTS: Record<AgentId, DispatchAgentState> = {
 
 export const useHelmStore = create<HelmStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       scheduledTasks: {},
       agents: DEFAULT_AGENTS,
 
@@ -84,6 +104,7 @@ export const useHelmStore = create<HelmStore>()(
         set((state) => ({
           scheduledTasks: { ...state.scheduledTasks, [id]: task },
         }))
+        cronSend('register', task)
         return id
       },
 
@@ -98,6 +119,8 @@ export const useHelmStore = create<HelmStore>()(
             },
           }
         })
+        const updated = get().scheduledTasks[id]
+        if (updated) cronSend('register', updated)  // re-register with new settings
       },
 
       deleteScheduledTask: (id) => {
@@ -106,6 +129,7 @@ export const useHelmStore = create<HelmStore>()(
           const { [id]: _removed, ...rest } = state.scheduledTasks
           return { scheduledTasks: rest }
         })
+        cronSend('unregister', id)
       },
 
       toggleScheduledTask: (id) => {
@@ -119,6 +143,11 @@ export const useHelmStore = create<HelmStore>()(
             },
           }
         })
+        const toggled = get().scheduledTasks[id]
+        if (toggled) {
+          if (toggled.enabled) cronSend('register', toggled)
+          else cronSend('unregister', id)
+        }
       },
 
       // ── Dispatch ─────────────────────────────────────────────────────────
