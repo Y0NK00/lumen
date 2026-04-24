@@ -16,6 +16,7 @@ const SpeechRecognitionAPI: (new () => any) | undefined =
 export function InputBox({ onSend, onStop, isStreaming, disabled = false }: InputBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [isListening, setIsListening] = useState(false)
+  const [hasText, setHasText] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
 
@@ -27,7 +28,8 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false }: Inpu
     const el = textareaRef.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+    el.style.height = `${Math.min(el.scrollHeight, 180)}px`
+    setHasText(el.value.trim().length > 0)
   }, [])
 
   const handleSend = useCallback(() => {
@@ -38,6 +40,7 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false }: Inpu
     onSend(content)
     el.value = ''
     el.style.height = 'auto'
+    setHasText(false)
   }, [onSend, disabled])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -46,6 +49,11 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false }: Inpu
       handleSend()
     }
   }, [handleSend])
+
+  const scrollMsgListToBottom = () => {
+    const m = document.querySelector('[data-message-list]')
+    if (m) m.scrollTop = m.scrollHeight
+  }
 
   const toggleVoice = useCallback(() => {
     if (!SpeechRecognitionAPI) return
@@ -80,34 +88,44 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false }: Inpu
     setIsListening(true)
   }, [isListening, resize])
 
+  const canSend = hasText && !disabled && !isStreaming
+
   return (
-    <div className="shrink-0 w-full border-t border-border bg-background">
-      <div className="w-full max-w-3xl mx-auto px-3 py-3">
+    <div className="shrink-0 w-full bg-gradient-to-t from-background via-background/95 to-transparent pt-2 pb-safe">
+      <div className="w-full max-w-2xl mx-auto px-3 pb-3">
+        {/* Input pill */}
         <div className={[
-          'flex items-end gap-2 rounded-2xl border px-3 py-2.5 transition-all duration-150',
+          'flex items-end gap-1.5 rounded-2xl border px-3 py-2 transition-all duration-150',
           isStreaming || disabled
-            ? 'border-border bg-surface/60'
-            : 'border-border bg-surface focus-within:border-accent/50 focus-within:shadow-[0_0_0_3px_rgba(139,92,246,0.08)]',
+            ? 'border-border bg-surface/50'
+            : 'border-border bg-surface focus-within:border-accent/40 focus-within:shadow-[0_0_0_3px_rgba(139,92,246,0.07)]',
         ].join(' ')}>
 
-          {/* Voice button — only shown when Speech API is available and not streaming */}
+          {/* Voice button — hidden while streaming */}
           {!!SpeechRecognitionAPI && !isStreaming && (
             <button
               onClick={toggleVoice}
               title={isListening ? 'Stop listening' : 'Voice input'}
               className={[
-                'shrink-0 w-8 h-8 flex items-center justify-center rounded-xl transition-colors',
+                'shrink-0 w-8 h-8 flex items-center justify-center rounded-xl transition-colors mb-0.5',
                 isListening
                   ? 'bg-error/20 text-error animate-pulse'
                   : 'text-text-muted hover:text-text-primary hover:bg-surface-hover',
               ].join(' ')}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="2" width="6" height="12" rx="3" />
-                <path d="M5 10a7 7 0 0 0 14 0" />
-                <line x1="12" y1="19" x2="12" y2="22" />
-                <line x1="9" y1="22" x2="15" y2="22" />
-              </svg>
+              {isListening ? (
+                /* Waveform icon when active */
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M9 2v8M15 2v8M3 8v8M21 8v8M6 5v14M18 5v14M12 2v20"/>
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="2" width="6" height="12" rx="3" />
+                  <path d="M5 10a7 7 0 0 0 14 0" />
+                  <line x1="12" y1="19" x2="12" y2="22" />
+                  <line x1="9" y1="22" x2="15" y2="22" />
+                </svg>
+              )}
             </button>
           )}
 
@@ -115,38 +133,42 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false }: Inpu
             ref={textareaRef}
             rows={1}
             placeholder={
-              isListening ? '🎤 Listening…' :
-              isStreaming  ? 'Generating…'  :
+              isListening ? '🎤  Listening…' :
+              isStreaming  ? 'Generating…'   :
               'Message Lumen…'
             }
             disabled={disabled || isListening}
-            onFocus={() => { const m = document.querySelector("[data-message-list]"); if (m) m.scrollTop = m.scrollHeight }}
+            onFocus={scrollMsgListToBottom}
             onInput={resize}
             onKeyDown={handleKeyDown}
-            className="flex-1 resize-none bg-transparent border-0 text-[14px] text-text-primary
+            className="flex-1 resize-none bg-transparent border-0 text-[15px] text-text-primary
                        placeholder:text-text-muted outline-none leading-[1.6]
-                       max-h-[160px] overflow-y-auto py-0.5"
+                       max-h-[180px] overflow-y-auto py-1"
           />
 
+          {/* Action button — Stop while streaming, Send otherwise */}
           {isStreaming ? (
             <button
               onClick={onStop}
-              title="Stop"
-              className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl
+              title="Stop generating"
+              className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl mb-0.5
                          bg-error/15 text-error hover:bg-error/25 transition-colors"
             >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <rect x="2" y="2" width="6" height="6" rx="1" fill="currentColor" />
+              <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+                <rect x="1.5" y="1.5" width="6" height="6" rx="1.5" fill="currentColor" />
               </svg>
             </button>
           ) : (
             <button
               onClick={handleSend}
-              disabled={disabled}
+              disabled={!canSend}
               title="Send"
-              className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl
-                         bg-accent text-white hover:bg-accent-hover
-                         transition-colors active:scale-95 disabled:opacity-40"
+              className={[
+                'shrink-0 w-8 h-8 flex items-center justify-center rounded-xl mb-0.5 transition-all duration-150',
+                canSend
+                  ? 'bg-accent text-white hover:bg-accent-hover active:scale-95 shadow-sm'
+                  : 'bg-surface-active text-text-muted cursor-not-allowed',
+              ].join(' ')}
             >
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                 <path d="M6.5 1L6.5 12M6.5 1L2 5.5M6.5 1L11 5.5"
@@ -155,8 +177,9 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false }: Inpu
             </button>
           )}
         </div>
-        <p className="mt-1.5 text-center text-[11px] text-text-muted select-none">
-          Claude API · Enter to send
+
+        <p className="mt-1.5 text-center text-[11px] text-text-muted/50 select-none">
+          Lumen · Enter to send · Shift+Enter for new line
         </p>
       </div>
     </div>

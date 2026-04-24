@@ -1,3 +1,6 @@
+/* Load Inter from Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @import "tailwindcss";
 
 @theme {
@@ -16,7 +19,7 @@
   --color-code-bg:          #08080f;
   --color-code-header:      #0d0d1a;
   --color-code-inline:      #14142a;
-  --font-sans: "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
   /* Set by useVisualViewport hook — tracks true visible height on iOS */
   --viewport-height: 100dvh;
@@ -28,6 +31,9 @@ html {
   height: 100%;
   overflow: hidden;
   background: var(--color-background);
+  /* Sharper text on mobile */
+  text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -38,7 +44,10 @@ body {
   background: var(--color-background);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
@@ -51,20 +60,40 @@ body {
   overflow-x: hidden;
   /* Mobile safe areas */
   padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar { width: 4px; height: 4px; }
+/* Safe area bottom padding utility for input area */
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+
+/* Scrollbar styling — thin and subtle */
+::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
 
 /* Streaming cursor blink */
-@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
 .streaming-cursor::after {
   content: '▋';
   animation: blink 1s step-end infinite;
   color: var(--color-accent);
   margin-left: 1px;
+}
+
+/* Prevent tap highlight flicker on iOS */
+button, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Prevent input zoom on iOS (font-size must be ≥ 16px inside inputs on Safari) */
+textarea, input {
+  font-size: 16px !important;
+  font-family: var(--font-sans);
 }
