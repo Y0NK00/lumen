@@ -48,6 +48,16 @@ export interface ScheduledTask {
   lastRunAt?: number
   nextRunAt?: number         // optional — computed by a future runner
   scheduledFor?: number      // for cadence='once': unix ms timestamp of when to fire
+  lastStatus?: 'ok' | 'error'
+}
+
+export interface TaskResult {
+  taskId: string
+  label: string
+  prompt: string
+  result: string
+  ranAt: number
+  error?: string
 }
 
 // Agents are preconfigured archetypes (not user-created yet). The store tracks
@@ -67,6 +77,12 @@ interface HelmStore {
   updateScheduledTask: (id: string, patch: Partial<Omit<ScheduledTask, 'id' | 'createdAt'>>) => void
   deleteScheduledTask: (id: string) => void
   toggleScheduledTask: (id: string) => void
+
+  // Execution results — last 20 per task, persisted
+  taskResults: Record<string, TaskResult[]>
+  recordTaskRan:    (taskId: string, ranAt: number) => void
+  recordTaskResult: (result: TaskResult) => void
+  clearTaskResults: (taskId: string) => void
 
   // Dispatch
   agents: Record<AgentId, DispatchAgentState>
@@ -89,6 +105,7 @@ export const useHelmStore = create<HelmStore>()(
   persist(
     (set, get) => ({
       scheduledTasks: {},
+      taskResults: {},
       agents: DEFAULT_AGENTS,
 
       // ── Scheduled CRUD ───────────────────────────────────────────────────
@@ -150,6 +167,46 @@ export const useHelmStore = create<HelmStore>()(
         }
       },
 
+      // ── Execution results ─────────────────────────────────────────────────
+
+      recordTaskRan: (taskId, ranAt) => {
+        set((state) => {
+          const task = state.scheduledTasks[taskId]
+          if (!task) return state
+          return {
+            scheduledTasks: {
+              ...state.scheduledTasks,
+              [taskId]: { ...task, lastRunAt: ranAt },
+            },
+          }
+        })
+      },
+
+      recordTaskResult: (result) => {
+        set((state) => {
+          const existing = state.taskResults[result.taskId] ?? []
+          const updated = [result, ...existing].slice(0, 20) // keep last 20 per task
+          // Also update lastStatus on the task
+          const task = state.scheduledTasks[result.taskId]
+          const lastStatus: 'ok' | 'error' = result.error ? 'error' : 'ok'
+          const taskPatch = task
+            ? { scheduledTasks: { ...state.scheduledTasks, [result.taskId]: { ...task, lastStatus } } }
+            : {}
+          return {
+            ...taskPatch,
+            taskResults: { ...state.taskResults, [result.taskId]: updated },
+          }
+        })
+      },
+
+      clearTaskResults: (taskId) => {
+        set((state) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { [taskId]: _removed, ...rest } = state.taskResults
+          return { taskResults: rest }
+        })
+      },
+
       // ── Dispatch ─────────────────────────────────────────────────────────
 
       toggleAgent: (id) => {
@@ -198,9 +255,78 @@ export const CADENCE_LABELS: Record<Cadence, string> = {
   monthly: 'Monthly',
 }
 
-export const AGENT_META: Record<AgentId, { name: string; desc: string; icon: string }> = {
-  code:     { name: 'Code Agent',     desc: 'Shell, grep, git — code tasks',   icon: '⌥' },
-  research: { name: 'Research Agent', desc: 'Web search + summarization',      icon: '◎' },
-  file:     { name: 'File Agent',     desc: 'Read, write, organize files',     icon: '◫' },
-  schedule: { name: 'Schedule Agent', desc: 'Manage recurring jobs',           icon: '◷' },
+export const AGENT_META: Record<AgentId, { name: string; desc: string; icon: string; systemPrompt: string }> = {
+  code: {
+    name: 'Code Agent',
+    desc: 'Shell, grep, git — code tasks',
+    icon: '⌥',
+    systemPrompt: `You are a Code Agent running inside Helm — Lumen's autonomous task runner.
+
+Your specialization: software development, shell execution, debugging, and code operations.
+
+Operating mode:
+- Prefer running shell commands, reading files, and using grep/git over speculating
+- Always show exact commands before running them
+- When editing code, show a diff or the specific change — not the entire file
+- Fail fast and clearly: if a command errors, report the exact output and reason
+- Scope your work to the task — don't wander into unrelated files or refactors
+
+Tools available: shell execution, file read/write, grep, git. Use them.`,
+  },
+
+  research: {
+    name: 'Research Agent',
+    desc: 'Web search + summarization',
+    icon: '◎',
+    systemPrompt: `You are a Research Agent running inside Helm — Lumen's autonomous task runner.
+
+Your specialization: gathering, synthesizing, and presenting information from multiple sources.
+
+Operating mode:
+- Always search before concluding — don't rely on training data for facts that may be stale
+- Cite sources inline for every claim: [Source Name](URL)
+- Structure output clearly: Overview → Key Findings → Sources
+- When comparing options, use a table
+- Be thorough but not padded — cut anything that isn't a useful finding
+- Flag confidence level when information is ambiguous or conflicting
+
+Tools available: web search, web fetch. Use them aggressively.`,
+  },
+
+  file: {
+    name: 'File Agent',
+    desc: 'Read, write, organize files',
+    icon: '◫',
+    systemPrompt: `You are a File Agent running inside Helm — Lumen's autonomous task runner.
+
+Your specialization: file system operations — reading, writing, organizing, and transforming files.
+
+Operating mode:
+- Always list or read first before modifying — never assume file contents
+- Show a preview of changes before writing (diff or before/after snippet)
+- Prefer non-destructive operations: copy before delete, rename rather than overwrite
+- When organizing files, explain the naming/folder scheme before executing
+- Report exactly what was created, moved, or modified at the end
+- Respect the user's vault path — write session logs and memory exports there
+
+Tools available: file read/write, directory listing, shell. Use them.`,
+  },
+
+  schedule: {
+    name: 'Schedule Agent',
+    desc: 'Manage recurring jobs',
+    icon: '◷',
+    systemPrompt: `You are a Schedule Agent running inside Helm — Lumen's autonomous task runner.
+
+Your specialization: creating, managing, and reasoning about automated recurring tasks.
+
+Operating mode:
+- When asked to set up automation, ask for: trigger (time/event), what to do, what to do on failure
+- Be explicit about cadence — confirm "daily at 9am" means every calendar day, not every 24h from now
+- Before creating a scheduled task, summarize exactly what will happen and when
+- After creating or modifying a schedule, confirm the next run time
+- If a task failed, report the error clearly and suggest a fix before retrying
+
+Tools available: task scheduling (via Helm store), file read, shell for status checks.`,
+  },
 }

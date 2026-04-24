@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Message } from '../stores/chatStore'
-import { ToolCallCard } from './ToolCallCard'
+import { ToolCallGroup } from './ToolCallCard'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { ThinkingBlock, extractThinkingFromMessage } from './ThinkingBlock'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -38,7 +38,7 @@ function MessageBubble({ message, onOpenInArtifacts }: MessageBubbleProps) {
         // right-edge visually distinct.
         'min-w-0 rounded-2xl text-sm leading-relaxed',
         isUser
-          ? 'max-w-[72%] bg-surface border border-border text-text-primary px-4 py-3 rounded-tr-sm overflow-hidden break-words'
+          ? 'max-w-[72%] bg-surface border border-border text-text-primary px-4 py-3 rounded-tr-sm break-anywhere'
           : 'max-w-[85%] text-text-primary overflow-x-hidden',
       ].join(' ')}>
 
@@ -51,7 +51,35 @@ function MessageBubble({ message, onOpenInArtifacts }: MessageBubbleProps) {
         {isEmpty ? (
           <ThinkingIndicator />
         ) : isUser ? (
-          <p className="whitespace-pre-wrap break-words text-[13.5px]">{message.content}</p>
+          <div className="flex flex-col gap-2">
+            {/* Inline attachment previews */}
+            {message.attachments && message.attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {message.attachments.map((att, idx) =>
+                  att.type === 'image' ? (
+                    <img
+                      key={idx}
+                      src={`data:${att.mimeType};base64,${att.data}`}
+                      alt={att.name}
+                      className="max-w-[240px] max-h-[200px] rounded-xl object-cover border border-border/40"
+                    />
+                  ) : (
+                    <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-black/20 border border-border/30 text-[11.5px] text-text-muted">
+                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+                        <rect x="2" y="1" width="10" height="12" rx="1.5" />
+                        <line x1="4.5" y1="5" x2="9.5" y2="5" />
+                        <line x1="4.5" y1="7.5" x2="9.5" y2="7.5" />
+                      </svg>
+                      <span>{att.name}</span>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+            {message.content && (
+              <p className="whitespace-pre-wrap break-anywhere text-[13.5px]">{message.content}</p>
+            )}
+          </div>
         ) : (
           <div className="min-w-0">
             {/* Text content */}
@@ -76,13 +104,9 @@ function MessageBubble({ message, onOpenInArtifacts }: MessageBubbleProps) {
               </>
             )}
 
-            {/* Tool call cards */}
+            {/* Tool calls — grouped into one collapsible row */}
             {message.toolCalls && message.toolCalls.length > 0 && (
-              <div className="mt-1 space-y-1">
-                {message.toolCalls.map((tc) => (
-                  <ToolCallCard key={tc.id} toolCall={tc} />
-                ))}
-              </div>
+              <ToolCallGroup toolCalls={message.toolCalls} />
             )}
 
             {/* Waiting for tool result */}

@@ -2,197 +2,217 @@ import { useState } from 'react'
 import type { ToolCall } from '../stores/chatStore'
 import { DiffViewer } from './DiffViewer'
 
-// ─── Tool name → human label ──────────────────────────────────────────────────
+// ─── Tool metadata ────────────────────────────────────────────────────────────
 
-const TOOL_LABELS: Record<string, string> = {
-  // File tools (Phase 4)
-  read_file:          'Read File',
-  write_file:         'Write File',
-  list_dir:           'List Directory',
-  // Browser tools (Phase 5)
-  browser_navigate:   'Navigate',
-  browser_get_content:'Read Page',
-  browser_screenshot: 'Screenshot',
-  browser_click:      'Click',
-  browser_type:       'Type',
-  // Future
-  web_search:         'Web Search',
-  run_command:        'Run Command',
+const TOOL_META: Record<string, { label: string; icon: string; group: string }> = {
+  read_file:           { label: 'Read',       icon: '📄', group: 'file'    },
+  write_file:          { label: 'Write',      icon: '💾', group: 'file'    },
+  list_dir:            { label: 'List',       icon: '📁', group: 'file'    },
+  browser_navigate:    { label: 'Navigate',   icon: '🌐', group: 'browser' },
+  browser_get_content: { label: 'Read page',  icon: '📖', group: 'browser' },
+  browser_screenshot:  { label: 'Screenshot', icon: '📸', group: 'browser' },
+  browser_click:       { label: 'Click',      icon: '👆', group: 'browser' },
+  browser_type:        { label: 'Type',       icon: '⌨️', group: 'browser' },
+  web_search:          { label: 'Search',     icon: '🔍', group: 'search'  },
+  run_command:         { label: 'Run',        icon: '⚡', group: 'shell'   },
+  grep:                { label: 'Grep',       icon: '🔎', group: 'shell'   },
 }
 
-function toolLabel(name: string): string {
-  return TOOL_LABELS[name] ?? name.replace(/_/g, ' ')
+function meta(name: string) {
+  return TOOL_META[name] ?? { label: name.replace(/_/g, ' '), icon: '🔧', group: 'other' }
 }
 
-// ─── Tool name → icon ─────────────────────────────────────────────────────────
-
-const TOOL_ICONS: Record<string, string> = {
-  read_file:          '📄',
-  write_file:         '💾',
-  list_dir:           '📁',
-  browser_navigate:   '🌐',
-  browser_get_content:'📖',
-  browser_screenshot: '📸',
-  browser_click:      '👆',
-  browser_type:       '⌨️',
-  web_search:         '🔍',
-  run_command:        '⚡',
-}
-
-function toolIcon(name: string): string {
-  return TOOL_ICONS[name] ?? '🔧'
-}
-
-// ─── Status icon ─────────────────────────────────────────────────────────────
-
-function StatusIcon({ status }: { status: ToolCall['status'] }) {
-  if (status === 'running') {
-    return (
-      <span className="inline-block w-3.5 h-3.5 border-2 border-text-muted border-t-accent rounded-full animate-spin" />
-    )
+// Short summary shown in the list row — URL, path, command, query, etc.
+function rowSummary(tc: ToolCall): string {
+  const inp = (tc.input ?? {}) as Record<string, unknown>
+  switch (tc.name) {
+    case 'browser_navigate': return stripProtocol(String(inp.url ?? ''))
+    case 'browser_get_content': return stripProtocol(String(inp.url ?? ''))
+    case 'browser_click':    return String(inp.selector ?? '').slice(0, 50)
+    case 'browser_type':     return `"${String(inp.text ?? '').slice(0, 40)}"`
+    case 'read_file':
+    case 'write_file':
+    case 'list_dir':         return basename(String(inp.path ?? ''))
+    case 'run_command':
+    case 'grep':             return String(inp.command ?? inp.pattern ?? '').slice(0, 55)
+    case 'web_search':       return `"${String(inp.query ?? '').slice(0, 50)}"`
+    default:                 return ''
   }
-  if (status === 'done') {
-    return <span className="text-green-400 text-xs leading-none">✓</span>
+}
+
+function stripProtocol(url: string): string {
+  return url.replace(/^https?:\/\//, '').replace(/^www\./, '')
+}
+
+function basename(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path
+}
+
+// ─── Grouped summary label ────────────────────────────────────────────────────
+// "Searched 2 sources · Ran 3 commands" etc.
+
+export function toolGroupSummary(toolCalls: ToolCall[]): string {
+  const counts: Record<string, number> = {}
+  for (const tc of toolCalls) {
+    const g = meta(tc.name).group
+    counts[g] = (counts[g] ?? 0) + 1
   }
-  return <span className="text-error text-xs leading-none">✗</span>
+  const parts: string[] = []
+  if (counts.browser || counts.search) {
+    const n = (counts.browser ?? 0) + (counts.search ?? 0)
+    parts.push(`Searched ${n} source${n !== 1 ? 's' : ''}`)
+  }
+  if (counts.file) {
+    const n = counts.file
+    parts.push(`Accessed ${n} file${n !== 1 ? 's' : ''}`)
+  }
+  if (counts.shell) {
+    const n = counts.shell
+    parts.push(`Ran ${n} command${n !== 1 ? 's' : ''}`)
+  }
+  if (counts.other) {
+    const n = counts.other
+    parts.push(`${n} tool${n !== 1 ? 's' : ''}`)
+  }
+  return parts.join(' · ') || `${toolCalls.length} tool${toolCalls.length !== 1 ? 's' : ''}`
 }
 
-// ─── Collapsible panel ────────────────────────────────────────────────────────
+// ─── Single row (inside the expanded list) ────────────────────────────────────
 
-interface CollapsibleProps {
-  label: string
-  children: React.ReactNode
-  defaultOpen?: boolean
-}
-
-function Collapsible({ label, children, defaultOpen = false }: CollapsibleProps) {
-  const [open, setOpen] = useState(defaultOpen)
+function ToolRow({ tc }: { tc: ToolCall }) {
+  const [expanded, setExpanded] = useState(false)
+  const { label, icon } = meta(tc.name)
+  const summary = rowSummary(tc)
+  const isScreenshot = tc.name === 'browser_screenshot'
 
   return (
-    <div className="mt-1.5 border border-border rounded overflow-hidden">
+    <div className="flex flex-col">
       <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-2 py-1 px-1 rounded hover:bg-white/5 transition-colors text-left w-full group"
       >
-        <span>{label}</span>
-        <span className="ml-2 opacity-60">{open ? '▲' : '▼'}</span>
+        {/* Status dot */}
+        {tc.status === 'running' ? (
+          <span className="w-3 h-3 border border-text-muted border-t-accent rounded-full animate-spin shrink-0" />
+        ) : tc.status === 'done' ? (
+          <span className="text-[10px] text-green-400 shrink-0 w-3 text-center">✓</span>
+        ) : (
+          <span className="text-[10px] text-error shrink-0 w-3 text-center">✗</span>
+        )}
+
+        <span className="text-sm leading-none shrink-0" aria-hidden>{icon}</span>
+
+        <span className="text-xs text-text-muted shrink-0">{label}</span>
+
+        {summary && (
+          <span className="text-xs text-text-secondary truncate min-w-0 flex-1">{summary}</span>
+        )}
+
+        {/* Expand chevron — only show if there's something to expand */}
+        {(tc.result || isScreenshot) && (
+          <svg
+            width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor"
+            strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"
+            className={`shrink-0 text-text-muted opacity-0 group-hover:opacity-60 transition-all
+                        ${expanded ? 'rotate-180' : ''}`}
+          >
+            <polyline points="1,2.5 4,5.5 7,2.5" />
+          </svg>
+        )}
       </button>
-      {open && (
-        <div className="px-2.5 py-2 bg-code-bg border-t border-border overflow-x-auto">
-          {children}
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div className="ml-8 mb-1 rounded-lg overflow-hidden border border-border/60 bg-code-bg">
+          {isScreenshot && tc.imageDataUrl ? (
+            <img src={tc.imageDataUrl} alt="Screenshot" className="max-w-full" />
+          ) : tc.name === 'write_file' && tc.newContent ? (
+            <DiffViewer
+              oldContent={(tc as any).oldContent ?? ''}
+              newContent={tc.newContent}
+              filename={String(tc.input?.path ?? '')}
+            />
+          ) : (
+            <pre className={`px-3 py-2.5 text-[11px] font-mono leading-relaxed whitespace-pre-wrap break-all max-h-52 overflow-y-auto
+                            ${tc.success !== false ? 'text-text-secondary' : 'text-error'}`}>
+              {tc.result}
+            </pre>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-// ─── Summary line builders ────────────────────────────────────────────────────
-// Produce a short, human-readable summary for the card header so users don't
-// need to expand Input to see what happened. Falls back to '' when we can't
-// produce anything meaningful.
+// ─── ToolCallGroup — the public export used by MessageList ────────────────────
+// Renders all tool calls for a message as a single collapsible group.
 
-function summaryForTool(toolCall: ToolCall): string {
-  const { name, input } = toolCall
-  const inp = input as Record<string, unknown>
-
-  switch (name) {
-    case 'read_file':
-    case 'write_file':
-      return typeof inp.path === 'string' ? String(inp.path) : ''
-    case 'list_dir':
-      return typeof inp.path === 'string' ? String(inp.path) : ''
-    case 'browser_navigate':
-      return typeof inp.url === 'string' ? String(inp.url) : ''
-    case 'browser_click':
-      return typeof inp.selector === 'string' ? String(inp.selector) : ''
-    case 'browser_type':
-      return typeof inp.text === 'string' ? `"${String(inp.text).slice(0, 40)}"` : ''
-    case 'run_command':
-      return typeof inp.command === 'string' ? String(inp.command).slice(0, 60) : ''
-    case 'web_search':
-      return typeof inp.query === 'string' ? `"${String(inp.query)}"` : ''
-    default:
-      return ''
-  }
+interface ToolCallGroupProps {
+  toolCalls: (ToolCall & { imageDataUrl?: string; oldContent?: string | null; newContent?: string | null })[]
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+export function ToolCallGroup({ toolCalls }: ToolCallGroupProps) {
+  const [open, setOpen] = useState(false)
+  if (toolCalls.length === 0) return null
 
-interface ToolCallCardProps {
-  toolCall: ToolCall & { imageDataUrl?: string }
-}
-
-export function ToolCallCard({ toolCall }: ToolCallCardProps) {
-  const hasInput  = toolCall.input && Object.keys(toolCall.input).length > 0
-  const hasResult = toolCall.result !== undefined
-  const isScreenshot = toolCall.name === 'browser_screenshot'
-  const summary = summaryForTool(toolCall)
+  const isRunning = toolCalls.some((tc) => tc.status === 'running')
+  const hasError   = toolCalls.some((tc) => tc.status === 'error')
+  const summary    = toolGroupSummary(toolCalls)
 
   return (
-    <div className="mt-3 rounded-lg border border-border bg-assistant-bubble/50 px-3 py-2.5 text-xs">
-
-      {/* ── Header: icon + tool name + summary + status ───────────────────── */}
-      <div className="flex items-center gap-2 min-w-0">
-        <StatusIcon status={toolCall.status} />
-        <span className="text-base leading-none shrink-0" aria-hidden>{toolIcon(toolCall.name)}</span>
-        <span className="font-mono font-medium text-accent shrink-0">{toolLabel(toolCall.name)}</span>
-        {summary && (
-          <span className="font-mono text-text-secondary truncate" title={summary}>
-            {summary}
-          </span>
+    <div className="my-2 rounded-xl border border-border/50 bg-surface/40 overflow-hidden text-xs">
+      {/* ── Header row — click to expand/collapse ── */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 transition-colors text-left"
+      >
+        {isRunning ? (
+          <span className="w-3 h-3 border border-text-muted border-t-accent rounded-full animate-spin shrink-0" />
+        ) : hasError ? (
+          <span className="text-error shrink-0">✗</span>
+        ) : (
+          <span className="text-green-400 shrink-0">✓</span>
         )}
-        {toolCall.status === 'running' && (
-          <span className="text-text-muted italic shrink-0">executing…</span>
-        )}
-        {toolCall.status === 'error' && (
-          <span className="text-error italic shrink-0">failed</span>
-        )}
-      </div>
 
-      {/* ── Input (collapsible) ───────────────────────────────────────────── */}
-      {hasInput && (
-        <Collapsible label="Input">
-          <pre className="text-text-secondary font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all">
-            {JSON.stringify(toolCall.input, null, 2)}
-          </pre>
-        </Collapsible>
-      )}
+        <span className="flex-1 text-text-secondary font-medium">
+          {isRunning ? `Working…` : summary}
+        </span>
 
-      {/* ── Result (collapsible) ─────────────────────────────────────────── */}
-      {hasResult && (
-        <>
-          {isScreenshot && toolCall.imageDataUrl ? (
-            // Screenshots render as an actual inline image
-            <Collapsible label="Screenshot" defaultOpen>
-              <img
-                src={toolCall.imageDataUrl}
-                alt="Browser screenshot"
-                className="max-w-full rounded border border-border"
-              />
-            </Collapsible>
-          ) : (
-            <Collapsible label={toolCall.success ? 'Result' : 'Error'} defaultOpen>
-              <pre
-                className={[
-                  'font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all max-h-48 overflow-y-auto',
-                  toolCall.success ? 'text-text-secondary' : 'text-error',
-                ].join(' ')}
-              >
-                {toolCall.result}
-              </pre>
-            </Collapsible>
-          )}
+        {/* Live step name while running */}
+        {isRunning && (() => {
+          const running = toolCalls.find((tc) => tc.status === 'running')
+          return running ? (
+            <span className="text-text-muted truncate max-w-[200px]">
+              {meta(running.name).label}
+              {rowSummary(running) && ` · ${rowSummary(running)}`}
+            </span>
+          ) : null
+        })()}
 
-          {/* ── Diff view for write_file ──────────────────────────────────── */}
-          {toolCall.name === 'write_file' && toolCall.newContent && (
-            <DiffViewer
-              oldContent={toolCall.oldContent ?? ''}
-              newContent={toolCall.newContent}
-              filename={String(toolCall.input?.path ?? '')}
-            />
-          )}
-        </>
+        <svg
+          width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor"
+          strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"
+          className={`shrink-0 text-text-muted transition-transform ${open ? 'rotate-180' : ''}`}
+        >
+          <polyline points="1,2.5 4,5.5 7,2.5" />
+        </svg>
+      </button>
+
+      {/* ── Expanded list ── */}
+      {open && (
+        <div className="border-t border-border/50 px-3 py-1.5 flex flex-col">
+          {toolCalls.map((tc) => (
+            <ToolRow key={tc.id} tc={tc} />
+          ))}
+        </div>
       )}
     </div>
   )
+}
+
+// ─── Legacy export (keep so old imports don't break) ─────────────────────────
+// Anything still using <ToolCallCard> directly gets the row version.
+
+export function ToolCallCard({ toolCall }: { toolCall: ToolCall }) {
+  return <ToolRow tc={toolCall} />
 }

@@ -26,6 +26,15 @@ export interface ToolCall {
   newContent?: string                 // Phase 6: write_file — content after the write (for DiffViewer)
 }
 
+// Attachment carried in a user message — image (base64) or file (text content)
+export interface MessageAttachment {
+  type: 'image' | 'file'
+  name: string
+  mimeType: string          // e.g. 'image/png', 'application/pdf', 'text/plain'
+  data: string              // base64 for images; extracted text for files
+  size: number              // original byte size
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -34,6 +43,7 @@ export interface Message {
   isStreaming?: boolean
   error?: string
   toolCalls?: ToolCall[]              // Phase 4: populated when Claude uses tools
+  attachments?: MessageAttachment[]   // Phase N: drag-and-drop files/images
 }
 
 // Conversations live in one of two top-level modes: 'chat' (regular chat)
@@ -53,6 +63,7 @@ export interface Conversation {
   pinned?: boolean              // v2: surfaced in the Pinned sidebar section
   pinnedAt?: number             // when it was pinned (used to sort pinned list)
   projectId?: string            // v3: optional Project scope (rootPath + systemPrompt)
+  agentSystemPrompt?: string    // v4: Helm agent-injected system prompt (code/research/file/schedule)
 }
 
 interface ChatStore {
@@ -60,10 +71,11 @@ interface ChatStore {
   activeConversationId: string | null
 
   // Conversation actions
-  createConversation: (model?: string, mode?: ConvMode, projectId?: string) => string
+  createConversation: (model?: string, mode?: ConvMode, projectId?: string, agentSystemPrompt?: string) => string
   setActiveConversation: (id: string) => void
   deleteConversation: (id: string) => void
   updateConversationTitle: (id: string, title: string) => void
+  updateConversationModel:  (id: string, model: string) => void
   togglePinned: (id: string) => void
   setConversationProject: (id: string, projectId: string | null) => void
 
@@ -88,7 +100,7 @@ export const useChatStore = create<ChatStore>()(
 
       // ── Conversation CRUD ────────────────────────────────────────────────
 
-      createConversation: (model = 'qwen2.5:14b', mode: ConvMode = 'chat', projectId?: string) => {
+      createConversation: (model = 'qwen2.5:14b', mode: ConvMode = 'chat', projectId?: string, agentSystemPrompt?: string) => {
         const id = crypto.randomUUID()
         const now = Date.now()
         set((state) => ({
@@ -103,6 +115,7 @@ export const useChatStore = create<ChatStore>()(
               createdAt: now,
               updatedAt: now,
               projectId,
+              ...(agentSystemPrompt ? { agentSystemPrompt } : {}),
             },
           },
           activeConversationId: id,
@@ -129,12 +142,15 @@ export const useChatStore = create<ChatStore>()(
         set((state) => {
           const conv = state.conversations[id]
           if (!conv) return state
-          return {
-            conversations: {
-              ...state.conversations,
-              [id]: { ...conv, title },
-            },
-          }
+          return { conversations: { ...state.conversations, [id]: { ...conv, title } } }
+        })
+      },
+
+      updateConversationModel: (id, model) => {
+        set((state) => {
+          const conv = state.conversations[id]
+          if (!conv) return state
+          return { conversations: { ...state.conversations, [id]: { ...conv, model, updatedAt: Date.now() } } }
         })
       },
 

@@ -115,6 +115,53 @@ contextBridge.exposeInMainWorld('tower', {
     return () => ipcRenderer.removeListener('cron:task-result', handler)
   },
 
+  // ── Vault: Obsidian / folder access ──────────────────────────────────────
+  vault: {
+    setPath:         (p)                      => ipcRenderer.send('vault:setPath', p),
+    readFile:        (filePath)               => ipcRenderer.invoke('vault:readFile', filePath),
+    writeFile:       (filePath, text)         => ipcRenderer.invoke('vault:writeFile', filePath, text),
+    listFiles:       (dirPath, ext)           => ipcRenderer.invoke('vault:listFiles', dirPath, ext),
+    search:          (query, dirPath)         => ipcRenderer.invoke('vault:search', query, dirPath),
+    getStats:        ()                       => ipcRenderer.invoke('vault:getStats'),
+    // Semantic index
+    buildIndex:      (opts)                   => ipcRenderer.invoke('vault:buildIndex', opts),
+    semanticSearch:  (opts)                   => ipcRenderer.invoke('vault:semanticSearch', opts),
+    indexMeta:       ()                       => ipcRenderer.invoke('vault:indexMeta'),
+    clearIndex:      ()                       => ipcRenderer.invoke('vault:clearIndex'),
+    onIndexProgress: (cb) => {
+      const handler = (_, data) => cb(data)
+      ipcRenderer.on('vault:indexProgress', handler)
+      return () => ipcRenderer.removeListener('vault:indexProgress', handler)
+    },
+  },
+
+  // ── Remote Dispatch: phone → Lumen HTTP bridge ────────────────────────────
+  remoteDispatch: {
+    start:    (port, secret) => ipcRenderer.send('remote:start', { port, secret }),
+    stop:     ()             => ipcRenderer.send('remote:stop'),
+    getIPs:   ()             => ipcRenderer.invoke('remote:getIPs'),
+    onMessage: (cb) => {
+      const handler = (_, data) => cb(data)
+      ipcRenderer.on('remote:dispatch', handler)
+      return () => ipcRenderer.removeListener('remote:dispatch', handler)
+    },
+    onServerStarted: (cb) => {
+      const handler = (_, data) => cb(data)
+      ipcRenderer.on('remote:serverStarted', handler)
+      return () => ipcRenderer.removeListener('remote:serverStarted', handler)
+    },
+    onServerError: (cb) => {
+      const handler = (_, data) => cb(data)
+      ipcRenderer.on('remote:serverError', handler)
+      return () => ipcRenderer.removeListener('remote:serverError', handler)
+    },
+    onNewConversation: (cb) => {
+      const handler = (_, data) => cb(data)
+      ipcRenderer.on('remote:newConversation', handler)
+      return () => ipcRenderer.removeListener('remote:newConversation', handler)
+    },
+  },
+
   // ── AI Driver BrowserView ──────────────────────────────────────────────────
   driver: {
     init:      (url)    => ipcRenderer.invoke('driver:init', { url }),

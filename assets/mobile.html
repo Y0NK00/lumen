@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Lumen</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#7c3aed">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Lumen">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Safe-area insets for notched phones */
+    :root {
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    body {
+      padding-top: var(--safe-top);
+      padding-bottom: var(--safe-bottom);
+      background: #030306;
+      color: #e2e2e8;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Hide scrollbars but keep functionality */
+    ::-webkit-scrollbar { display: none; }
+    * { scrollbar-width: none; -ms-overflow-style: none; box-sizing: border-box; }
+
+    /* Streaming cursor blink */
+    .cursor::after {
+      content: '▊';
+      display: inline-block;
+      animation: blink 0.9s step-end infinite;
+      color: #7c3aed;
+      margin-left: 1px;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1 } 50% { opacity: 0 } }
+
+    /* Drawer slide */
+    #drawer { transition: transform 0.25s cubic-bezier(0.4,0,0.2,1); }
+    #overlay { transition: opacity 0.25s ease; }
+
+    /* Auto-resize textarea */
+    #msgInput { field-sizing: content; min-height: 44px; max-height: 160px; }
+
+    /* Markdown-ish message rendering */
+    .msg-content code {
+      background: rgba(255,255,255,0.08);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.85em;
+    }
+    .msg-content pre {
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      margin: 8px 0;
+    }
+    .msg-content pre code {
+      background: transparent;
+      padding: 0;
+      font-size: 0.82em;
+    }
+    .msg-content p { margin: 0 0 6px; line-height: 1.55; }
+    .msg-content p:last-child { margin-bottom: 0; }
+    .msg-content strong { color: #ececf1; }
+    .msg-content ul, .msg-content ol { padding-left: 18px; margin: 4px 0; }
+    .msg-content li { margin: 2px 0; line-height: 1.5; }
+    .msg-content h1,.msg-content h2,.msg-content h3 { color: #ececf1; font-weight: 600; margin: 10px 0 4px; }
+    .msg-content h1 { font-size: 1.1em; }
+    .msg-content h2 { font-size: 1.0em; }
+    .msg-content h3 { font-size: 0.95em; }
+
+    /* Spinner */
+    @keyframes spin { to { transform: rotate(360deg) } }
+    .spin { animation: spin 1s linear infinite; }
+
+    /* Message fade-in */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px) }
+      to   { opacity: 1; transform: translateY(0) }
+    }
+    .msg-in { animation: fadeUp 0.2s ease forwards; }
+  </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden">
+
+<!-- ── Token Setup Modal ── -->
+<div id="tokenModal" class="hidden fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm">
+  <div class="w-full max-w-lg bg-gray-900 border border-gray-700 rounded-t-2xl p-6 pb-10 flex flex-col gap-5">
+    <div>
+      <h2 class="text-base font-semibold text-white">Enter Auth Token</h2>
+      <p class="text-sm text-gray-400 mt-1">This server requires a token. Find it in Lumen → Settings → Mobile.</p>
+    </div>
+    <input id="tokenInput" type="password" placeholder="Paste token here…"
+      class="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500"
+      autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    <button onclick="submitToken()"
+      class="w-full py-3 bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white font-semibold rounded-xl text-sm transition-colors">
+      Connect
+    </button>
+    <p id="tokenError" class="hidden text-xs text-red-400 text-center -mt-2">Invalid token. Try again.</p>
+  </div>
+</div>
+
+<!-- ── Drawer Overlay ── -->
+<div id="overlay" class="fixed inset-0 z-30 bg-black/60 opacity-0 pointer-events-none" onclick="hideDrawer()"></div>
+
+<!-- ── Slide-in Drawer ── -->
+<aside id="drawer" class="fixed top-0 left-0 z-40 h-full w-72 -translate-x-full
+  bg-gray-950 border-r border-gray-800 flex flex-col"
+  style="padding-top: var(--safe-top)">
+
+  <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800 shrink-0">
+    <div class="flex items-center gap-2.5">
+      <div class="w-7 h-7 bg-violet-600 rounded-lg flex items-center justify-center text-white text-xs font-bold">L</div>
+      <span class="text-sm font-semibold text-white">Lumen</span>
+    </div>
+    <button onclick="hideDrawer()" class="p-1 rounded-lg text-gray-500 hover:text-gray-300 transition-colors">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <line x1="4" y1="4" x2="14" y2="14"/><line x1="14" y1="4" x2="4" y2="14"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="px-3 py-3 border-b border-gray-800 shrink-0">
+    <button onclick="newChat()"
+      class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-violet-600/15 border border-violet-500/25
+             text-sm font-medium text-violet-300 hover:bg-violet-600/25 active:bg-violet-600/35 transition-colors">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/>
+      </svg>
+      New Chat
+    </button>
+  </div>
+
+  <div id="convList" class="flex-1 overflow-y-auto py-2 flex flex-col gap-0.5 px-2">
+    <p class="text-xs text-gray-600 text-center pt-6">Loading conversations…</p>
+  </div>
+
+  <div class="px-4 py-3 border-t border-gray-800 shrink-0">
+    <button onclick="showSettings()" class="text-xs text-gray-600 hover:text-gray-400 transition-colors">
+      ⚙ Token Settings
+    </button>
+  </div>
+</aside>
+
+<!-- ── Header ── -->
+<header class="flex items-center justify-between px-4 shrink-0
+  bg-gray-950/95 backdrop-blur-sm border-b border-gray-800/60"
+  style="padding-top: calc(var(--safe-top) + 12px); padding-bottom: 12px">
+
+  <button onclick="showDrawer()" class="p-2 -ml-2 rounded-xl text-gray-500 hover:text-gray-200 active:text-gray-100 transition-colors">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <line x1="3" y1="5" x2="17" y2="5"/>
+      <line x1="3" y1="10" x2="17" y2="10"/>
+      <line x1="3" y1="15" x2="17" y2="15"/>
+    </svg>
+  </button>
+
+  <div class="flex items-center gap-2">
+    <div class="w-6 h-6 bg-violet-600 rounded-md flex items-center justify-center text-white text-[10px] font-bold">L</div>
+    <h1 id="convTitle" class="text-sm font-semibold text-gray-100 truncate max-w-[160px]">Lumen</h1>
+  </div>
+
+  <button onclick="newChat()" class="p-2 -mr-2 rounded-xl text-gray-500 hover:text-gray-200 transition-colors">
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <line x1="9" y1="2" x2="9" y2="16"/><line x1="2" y1="9" x2="16" y2="9"/>
+    </svg>
+  </button>
+</header>
+
+<!-- ── Message List ── -->
+<div id="messages" class="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-5">
+  <div id="emptyState" class="flex-1 flex flex-col items-center justify-center gap-3 pt-20 pb-10 opacity-60">
+    <div class="w-12 h-12 bg-violet-600/20 border border-violet-500/30 rounded-2xl flex items-center justify-center text-violet-400 text-xl">
+      L
+    </div>
+    <p class="text-sm text-gray-500 text-center">Start a conversation with Lumen</p>
+  </div>
+</div>
+
+<!-- ── Input Area ── -->
+<div class="shrink-0 px-3 flex items-end gap-2 bg-gray-950/95 backdrop-blur-sm border-t border-gray-800/60"
+  style="padding-top: 10px; padding-bottom: calc(var(--safe-bottom) + 10px)">
+
+  <div class="flex-1 relative">
+    <textarea id="msgInput" rows="1" placeholder="Message Lumen…"
+      class="w-full bg-gray-900 border border-gray-700 rounded-2xl px-4 py-3 text-sm text-gray-100
+             placeholder-gray-600 focus:outline-none focus:border-violet-500/70 resize-none
+             transition-colors leading-relaxed"
+      onkeydown="handleKeyDown(event)"
+      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,160)+'px'"
+    ></textarea>
+  </div>
+
+  <button id="sendBtn" onclick="handleSend()"
+    class="w-11 h-11 mb-0.5 flex items-center justify-center bg-violet-600 hover:bg-violet-500
+           active:bg-violet-700 disabled:opacity-40 rounded-2xl text-white transition-colors shrink-0">
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="9" y1="15" x2="9" y2="3"/>
+      <polyline points="4,8 9,3 14,8"/>
+    </svg>
+  </button>
+</div>
+
+
+<script>
+// ============================================================
+// State
+// ============================================================
+let authToken       = localStorage.getItem('lumenToken') || ''
+let conversations   = []
+let currentConvId   = null
+let isStreaming     = false
+let streamingEl     = null    // active streaming bubble's content div
+let toolCardEl      = null    // active tool-calls container
+
+// ============================================================
+// Boot
+// ============================================================
+async function init() {
+  try {
+    const r = await apiFetch('GET', '/api/health')
+    if (r.status === 401) { showTokenModal(); return }
+    await loadConversations()
+    if (conversations.length > 0) {
+      await openConversation(conversations[0].id)
+    }
+  } catch (e) {
+    showError('Cannot reach Lumen server. Make sure the app is running and Remote Dispatch is enabled.')
+  }
+}
+
+// ============================================================
+// API fetch wrapper
+// ============================================================
+async function apiFetch(method, path, body) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  }
+  if (authToken) opts.headers['x-lumen-token'] = authToken
+  if (body) opts.body = JSON.stringify(body)
+  const res = await fetch(path, opts)
+  return res
+}
+
+async function apiJSON(method, path, body) {
+  const res = await apiFetch(method, path, body)
+  if (res.status === 401) { showTokenModal(); throw new Error('Unauthorized') }
+  return res.json()
+}
+
+// ============================================================
+// Auth
+// ============================================================
+function showTokenModal() {
+  document.getElementById('tokenModal').classList.remove('hidden')
+  document.getElementById('tokenInput').focus()
+}
+
+function hideTokenModal() {
+  document.getElementById('tokenModal').classList.add('hidden')
+  document.getElementById('tokenError').classList.add('hidden')
+}
+
+async function submitToken() {
+  const token = document.getElementById('tokenInput').value.trim()
+  const r = await fetch('/api/health', {
+    headers: { 'x-lumen-token': token }
+  })
+  if (r.status === 401) {
+    document.getElementById('tokenError').classList.remove('hidden')
+    return
+  }
+  authToken = token
+  localStorage.setItem('lumenToken', token)
+  hideTokenModal()
+  init()
+}
+
+document.getElementById('tokenInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitToken()
+})
+
+function showSettings() {
+  hideDrawer()
+  document.getElementById('tokenModal').classList.remove('hidden')
+  document.getElementById('tokenInput').value = authToken
+  document.getElementById('tokenError').classList.add('hidden')
+}
+
+// ============================================================
+// Drawer
+// ============================================================
+function showDrawer() {
+  document.getElementById('drawer').classList.remove('-translate-x-full')
+  const ov = document.getElementById('overlay')
+  ov.classList.remove('pointer-events-none', 'opacity-0')
+  ov.classList.add('opacity-100')
+}
+
+function hideDrawer() {
+  document.getElementById('drawer').classList.add('-translate-x-full')
+  const ov = document.getElementById('overlay')
+  ov.classList.add('pointer-events-none', 'opacity-0')
+  ov.classList.remove('opacity-100')
+}
+
+// ============================================================
+// Conversations
+// ============================================================
+async function loadConversations() {
+  conversations = await apiJSON('GET', '/api/conversations')
+  renderConvList()
+}
+
+function renderConvList() {
+  const list = document.getElementById('convList')
+  if (!conversations.length) {
+    list.innerHTML = '<p class="text-xs text-gray-600 text-center pt-6">No conversations yet</p>'
+    return
+  }
+  list.innerHTML = conversations.map(c => `
+    <button
+      onclick="openConversation('${c.id}');hideDrawer()"
+      class="w-full text-left px-3 py-2.5 rounded-xl transition-colors group
+        ${c.id === currentConvId
+          ? 'bg-gray-800 text-gray-100'
+          : 'text-gray-400 hover:bg-gray-900 hover:text-gray-200'}"
+    >
+      <p class="text-[13px] font-medium truncate">${escHtml(c.title)}</p>
+      <p class="text-[11px] mt-0.5 ${c.id === currentConvId ? 'text-gray-500' : 'text-gray-600'}">
+        ${c.messageCount} msg${c.messageCount !== 1 ? 's' : ''} · ${relTime(c.updatedAt)}
+      </p>
+    </button>
+  `).join('')
+}
+
+async function openConversation(id) {
+  currentConvId = id
+  const data = await apiJSON('GET', `/api/conversations/${id}`)
+  document.getElementById('convTitle').textContent = data.title || 'Untitled'
+  renderMessages(data.messages || [])
+  renderConvList()   // refresh active indicator
+  scrollToBottom()
+}
+
+async function newChat() {
+  hideDrawer()
+  const conv = await apiJSON('POST', '/api/conversations')
+  conversations.unshift(conv)
+  currentConvId = conv.id
+  document.getElementById('convTitle').textContent = conv.title
+  clearMessages()
+  renderConvList()
+}
+
+// ============================================================
+// Message rendering
+// ============================================================
+function clearMessages() {
+  const container = document.getElementById('messages')
+  container.innerHTML = `
+    <div id="emptyState" class="flex-1 flex flex-col items-center justify-center gap-3 pt-20 pb-10 opacity-60">
+      <div class="w-12 h-12 bg-violet-600/20 border border-violet-500/30 rounded-2xl flex items-center justify-center text-violet-400 text-xl">L</div>
+      <p class="text-sm text-gray-500 text-center">Start a conversation with Lumen</p>
+    </div>`
+}
+
+function renderMessages(messages) {
+  const container = document.getElementById('messages')
+  container.innerHTML = ''
+  for (const msg of messages) {
+    if (msg.role === 'user' || msg.role === 'assistant') {
+      container.appendChild(buildMsgEl(msg.role, msg.content))
+    }
+  }
+}
+
+function buildMsgEl(role, content) {
+  const wrap = document.createElement('div')
+  wrap.className = `flex flex-col gap-1 msg-in ${role === 'user' ? 'items-end' : 'items-start'}`
+
+  const bubble = document.createElement('div')
+  if (role === 'user') {
+    bubble.className = 'max-w-[85%] px-4 py-3 rounded-2xl rounded-br-md bg-violet-600/25 border border-violet-500/20 text-sm text-gray-100 whitespace-pre-wrap leading-relaxed'
+    bubble.textContent = content
+  } else {
+    bubble.className = 'max-w-[92%] px-4 py-3 rounded-2xl rounded-bl-md bg-gray-900 border border-gray-800 text-sm text-gray-200'
+    const contentDiv = document.createElement('div')
+    contentDiv.className = 'msg-content'
+    contentDiv.innerHTML = renderMarkdown(content)
+    bubble.appendChild(contentDiv)
+  }
+
+  wrap.appendChild(bubble)
+  return wrap
+}
+
+// ============================================================
+// Send message + SSE streaming
+// ============================================================
+async function handleSend() {
+  const input = document.getElementById('msgInput')
+  const text  = input.value.trim()
+  if (!text || isStreaming) return
+  if (!currentConvId) await newChat()
+
+  input.value = ''
+  input.style.height = 'auto'
+
+  // Remove empty state
+  const es = document.getElementById('emptyState')
+  if (es) es.remove()
+
+  // Add user bubble
+  const container = document.getElementById('messages')
+  container.appendChild(buildMsgEl('user', text))
+
+  // Create empty assistant bubble (will stream into it)
+  const assistWrap = document.createElement('div')
+  assistWrap.className = 'flex flex-col gap-1 msg-in items-start'
+  const assistBubble = document.createElement('div')
+  assistBubble.className = 'max-w-[92%] px-4 py-3 rounded-2xl rounded-bl-md bg-gray-900 border border-gray-800 text-sm text-gray-200'
+
+  streamingEl = document.createElement('div')
+  streamingEl.className = 'msg-content cursor'
+  streamingEl.textContent = ''
+
+  toolCardEl = document.createElement('div')
+  toolCardEl.className = 'flex flex-col gap-1.5'
+
+  assistBubble.appendChild(toolCardEl)
+  assistBubble.appendChild(streamingEl)
+  assistWrap.appendChild(assistBubble)
+  container.appendChild(assistWrap)
+
+  scrollToBottom()
+  setStreaming(true)
+
+  try {
+    const result = await apiJSON('POST', `/api/conversations/${currentConvId}/messages`, { text })
+    if (!result.streamId) throw new Error('No streamId returned')
+
+    // Update title optimistically
+    if (conversations.length > 0) {
+      const conv = conversations.find(c => c.id === currentConvId)
+      if (conv && conv.title === 'New Chat') {
+        conv.title = text.slice(0, 50)
+        document.getElementById('convTitle').textContent = conv.title
+        renderConvList()
+      }
+    }
+
+    await connectToStream(result.streamId)
+  } catch (e) {
+    if (e.message !== 'Unauthorized') {
+      streamingEl.classList.remove('cursor')
+      streamingEl.innerHTML = `<span class="text-red-400">Error: ${escHtml(e.message)}</span>`
+    }
+    setStreaming(false)
+  }
+}
+
+function handleKeyDown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    handleSend()
+  }
+}
+
+function setStreaming(on) {
+  isStreaming = on
+  const btn = document.getElementById('sendBtn')
+  btn.disabled = on
+}
+
+// ============================================================
+// SSE streaming
+// ============================================================
+function connectToStream(streamId) {
+  return new Promise((resolve, reject) => {
+    const url = authToken
+      ? `/api/stream/${streamId}?token=${encodeURIComponent(authToken)}`
+      : `/api/stream/${streamId}`
+
+    const es = new EventSource(url)
+    let fullText = ''
+
+    es.onmessage = (e) => {
+      let event
+      try { event = JSON.parse(e.data) } catch { return }
+
+      switch (event.type) {
+        case 'chunk': {
+          fullText += event.text
+          streamingEl.textContent = fullText
+          streamingEl.classList.add('cursor')
+          scrollToBottom()
+          break
+        }
+        case 'tool_start': {
+          const card = makeToolCard(event.name, 'running')
+          toolCardEl.appendChild(card)
+          scrollToBottom()
+          break
+        }
+        case 'tool_result': {
+          // Find the last running card with this tool name and mark done
+          const cards = toolCardEl.querySelectorAll('[data-tool]')
+          for (let i = cards.length - 1; i >= 0; i--) {
+            if (cards[i].dataset.tool === event.name && cards[i].dataset.status === 'running') {
+              updateToolCard(cards[i], 'done')
+              break
+            }
+          }
+          break
+        }
+        case 'done': {
+          es.close()
+          streamingEl.classList.remove('cursor')
+          // Re-render as proper markdown now that stream is complete
+          streamingEl.innerHTML = renderMarkdown(fullText)
+
+          // Token count badge
+          if (event.usage) {
+            const badge = document.createElement('p')
+            badge.className = 'text-[10.5px] text-gray-600 mt-1.5 font-mono'
+            const inK  = (event.usage.input  / 1000).toFixed(1)
+            const outK = (event.usage.output / 1000).toFixed(1)
+            badge.textContent = `${inK}k in · ${outK}k out`
+            streamingEl.parentElement.appendChild(badge)
+          }
+
+          setStreaming(false)
+          streamingEl = null
+          toolCardEl  = null
+
+          // Refresh conv list to update message count
+          loadConversations()
+          resolve()
+          break
+        }
+        case 'error': {
+          es.close()
+          streamingEl.classList.remove('cursor')
+          streamingEl.innerHTML = `<span class="text-red-400">Error: ${escHtml(event.message)}</span>`
+          setStreaming(false)
+          resolve()
+          break
+        }
+      }
+    }
+
+    es.onerror = () => {
+      es.close()
+      if (streamingEl) {
+        streamingEl.classList.remove('cursor')
+        if (!streamingEl.textContent) {
+          streamingEl.innerHTML = '<span class="text-red-400">Connection lost</span>'
+        } else {
+          streamingEl.innerHTML = renderMarkdown(streamingEl.textContent)
+        }
+      }
+      setStreaming(false)
+      resolve()  // resolve rather than reject so UI stays usable
+    }
+  })
+}
+
+// ============================================================
+// Tool call cards
+// ============================================================
+function makeToolCard(name, status) {
+  const el = document.createElement('div')
+  el.dataset.tool   = name
+  el.dataset.status = status
+  el.className      = 'flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-800/60 border border-gray-700/50 text-xs text-gray-400 w-fit'
+
+  if (status === 'running') {
+    el.innerHTML = `
+      <svg class="spin shrink-0" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#7c3aed" stroke-width="2">
+        <path d="M6 1v2M6 9v2M1 6h2M9 6h2" stroke-linecap="round"/>
+      </svg>
+      <span class="font-mono">${escHtml(name)}</span>`
+  }
+  return el
+}
+
+function updateToolCard(el, status) {
+  el.dataset.status = status
+  if (status === 'done') {
+    el.className = 'flex items-center gap-2 px-3 py-2 rounded-xl bg-green-900/20 border border-green-700/30 text-xs text-green-400/80 w-fit'
+    el.innerHTML = `
+      <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <polyline points="2,6 4.5,8.5 9,3"/>
+      </svg>
+      <span class="font-mono">${escHtml(el.dataset.tool)}</span>`
+  }
+}
+
+// ============================================================
+// Markdown renderer (minimal, no dependencies)
+// ============================================================
+function renderMarkdown(text) {
+  if (!text) return ''
+  // Escape HTML first
+  let s = escHtml(text)
+
+  // Code blocks
+  s = s.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code) =>
+    `<pre><code>${code.trim()}</code></pre>`)
+
+  // Inline code
+  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>')
+
+  // Bold
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+
+  // Italic
+  s = s.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '<em>$1</em>')
+
+  // Headers
+  s = s.replace(/^### (.+)$/gm, '<h3>$1</h3>')
+  s = s.replace(/^## (.+)$/gm,  '<h2>$1</h2>')
+  s = s.replace(/^# (.+)$/gm,   '<h1>$1</h1>')
+
+  // Unordered lists
+  s = s.replace(/^[*\-] (.+)$/gm, '<li>$1</li>')
+  s = s.replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>')
+  // Remove nested ul wrapping artifacts
+  s = s.replace(/<\/ul>\s*<ul>/g, '')
+
+  // Ordered lists
+  s = s.replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+
+  // Paragraphs (wrap lines not already wrapped)
+  s = s.split('\n\n')
+    .map(block => {
+      const t = block.trim()
+      if (!t) return ''
+      if (/^<(pre|h[123]|ul|ol|li)/.test(t)) return t
+      return `<p>${t.replace(/\n/g, '<br>')}</p>`
+    })
+    .filter(Boolean)
+    .join('\n')
+
+  return s
+}
+
+// ============================================================
+// Utilities
+// ============================================================
+function escHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function relTime(ts) {
+  if (!ts) return ''
+  const diff = Date.now() - ts
+  if (diff < 60_000)   return 'just now'
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+  return `${Math.floor(diff / 86_400_000)}d ago`
+}
+
+function scrollToBottom() {
+  const el = document.getElementById('messages')
+  requestAnimationFrame(() => { el.scrollTop = el.scrollHeight })
+}
+
+function showError(msg) {
+  const container = document.getElementById('messages')
+  container.innerHTML = `
+    <div class="flex-1 flex flex-col items-center justify-center gap-3 pt-20 pb-10 px-6 text-center">
+      <div class="text-3xl">⚠️</div>
+      <p class="text-sm text-red-400">${escHtml(msg)}</p>
+      <button onclick="init()" class="mt-2 px-4 py-2 bg-gray-800 rounded-xl text-xs text-gray-300 hover:bg-gray-700 transition-colors">
+        Try again
+      </button>
+    </div>`
+}
+
+// ============================================================
+// Start
+// ============================================================
+window.addEventListener('DOMContentLoaded', init)
+</script>
+</body>
+</html>

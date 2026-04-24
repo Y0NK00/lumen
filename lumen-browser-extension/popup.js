@@ -21,8 +21,8 @@ function setStatus(state) {
   }
 }
 
-// Ask the background service worker for the current WebSocket state.
-// offscreen.js tracks this — background.js pings it for status.
+// Ask the background service worker for current WebSocket state.
+// background.js owns the WS directly now — no offscreen relay needed.
 chrome.runtime.sendMessage({ source: 'lumen-popup', command: 'get_status' }, (response) => {
   if (chrome.runtime.lastError || !response) {
     setStatus('disconnected')

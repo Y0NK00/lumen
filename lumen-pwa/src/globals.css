@@ -107,6 +107,11 @@ pre {
   overflow-x: auto;
 }
 
+/* Settings group — border between rows */
+.settings-group > * + * {
+  border-top: 1px solid var(--color-border);
+}
+
 /* Explicit prose reset — ReactMarkdown output should always use sans-serif */
 .prose-reset, .prose-reset * {
   font-family: var(--font-sans);

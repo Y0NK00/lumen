@@ -6,9 +6,22 @@ import { useProjectsStore } from './stores/projectsStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useUIStore } from './stores/uiStore'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { useHelmSync } from './hooks/useHelmSync'
 
 export default function App() {
   const { createConversation, conversations, setActiveConversation, activeConversationId } = useChatStore()
+  const { loaded, loadFromDisk } = useSettingsStore()
+
+  // ── Helm: subscribe to cron execution events from main process ─────────────
+  useHelmSync()
+
+  // ── Boot: load persisted settings from disk before rendering ───────────────
+  // This must run before anything renders so theme/appearance is applied from
+  // the correct values, not the in-memory defaults. The `loaded` gate below
+  // prevents a flash of default theme on startup.
+  useEffect(() => {
+    loadFromDisk()
+  }, []) // eslint-disable-line
 
   // Register Ctrl+N / Ctrl+K / Ctrl+1/2/3 / Ctrl+,
   useKeyboardShortcuts()
@@ -34,6 +47,15 @@ export default function App() {
   useEffect(() => {
     const push = (s: ReturnType<typeof useSettingsStore.getState>) => {
       window.tower?.syncSettings?.({ apiKey: s.claudeApiKey, model: s.defaultClaudeModel })
+    }
+    push(useSettingsStore.getState())
+    return useSettingsStore.subscribe(push)
+  }, [])
+
+  // ── Vault path sync → main process ───────────────────────────────────────
+  useEffect(() => {
+    const push = (s: ReturnType<typeof useSettingsStore.getState>) => {
+      ;(window as any).tower?.vault?.setPath?.(s.vaultPath)
     }
     push(useSettingsStore.getState())
     return useSettingsStore.subscribe(push)
@@ -91,58 +113,24 @@ export default function App() {
   useEffect(() => {
     const apply = (s: ReturnType<typeof useSettingsStore.getState>) => {
       const root = document.documentElement
-      const preferReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      const shouldAnimate =
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      const on =
         s.backgroundAnimation === 'enabled' ||
-        (s.backgroundAnimation === 'auto' && !preferReducedMotion)
-      root.classList.toggle('bg-animated', shouldAnimate)
+        (s.backgroundAnimation === 'auto' && !reduced)
+      root.setAttribute('data-bg-anim', on ? 'on' : 'off')
     }
     apply(useSettingsStore.getState())
-    return useSettingsStore.subscribe(apply)
+    const unsub = useSettingsStore.subscribe(apply)
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const mqHandler = () => apply(useSettingsStore.getState())
+    mq.addEventListener('change', mqHandler)
+    return () => { unsub(); mq.removeEventListener('change', mqHandler) }
   }, [])
 
-  // ── Token usage: reset if new month ──────────────────────────────────────
-  useEffect(() => {
-    useSettingsStore.getState().resetTokensIfNewMonth()
-  }, [])
-
-  // ── Project rootPath sync → main process ─────────────────────────────────────
-  // Push the active project's rootPath so file tools can be scoped correctly.
-  useEffect(() => {
-    const push = () => {
-      const { projects, activeProjectId } = useProjectsStore.getState()
-      const rootPath = activeProjectId ? (projects[activeProjectId]?.rootPath ?? null) : null
-      window.tower?.syncRootPath?.(rootPath)
-    }
-    push()
-    return useProjectsStore.subscribe(push)
-  }, [])
-
-  // ── Cron task sync + result handler ──────────────────────────────────────────
-  // Sync persisted tasks to main on boot. When a task fires, update lastRunAt
-  // in the store and create a new conversation with the prompt + result.
-  useEffect(() => {
-    const tasks = Object.values(useHelmStore.getState().scheduledTasks)
-    window.tower?.cronSync?.(tasks)
-
-    const cleanupRan = window.tower?.onCronTaskRan?.((data) => {
-      useHelmStore.getState().updateScheduledTask(data.taskId, { lastRunAt: data.ranAt })
-    })
-
-    const cleanupResult = window.tower?.onCronTaskResult?.((data) => {
-      const { claudeApiKey, defaultClaudeModel, defaultOllamaModel, defaultProvider } = useSettingsStore.getState()
-      if (!claudeApiKey) return
-      const model = defaultProvider === 'claude' ? defaultClaudeModel : defaultOllamaModel
-      const { createConversation, addMessage } = useChatStore.getState()
-      const convId = createConversation(model, 'chat')
-      addMessage(convId, { role: 'user', content: `[Scheduled: ${data.label}]\n\n${data.prompt}` })
-      addMessage(convId, { role: 'assistant', content: data.result })
-      // Switch to Chat and surface the result
-      useUIStore.getState().setMode('chat')
-    })
-
-    return () => { cleanupRan?.(); cleanupResult?.() }
-  }, [])
+  // Block render until settings are hydrated from disk.
+  // The BrowserWindow uses show:false + ready-to-show, so the user never sees
+  // this null state — the window appears already themed.
+  if (!loaded) return null
 
   return <Layout />
 }

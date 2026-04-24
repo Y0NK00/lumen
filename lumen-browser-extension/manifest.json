@@ -6,9 +6,9 @@
 
   "permissions": [
     "tabs",
+    "tabGroups",
     "activeTab",
     "scripting",
-    "offscreen",
     "storage",
     "alarms"
   ],

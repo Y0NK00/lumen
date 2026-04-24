@@ -9,13 +9,16 @@ import {
   type ColorMode, type ChatFont, type BgAnim,
 } from '../stores/settingsStore'
 import { useChatStore } from '../stores/chatStore'
+import ThemeEngine from './ThemeEngine'
+import { useMemoryStore, syncMemoriesToVault, type MemoryTag } from '../stores/memoryStore'
+import { useSkillsStore, type Skill, type TriggerType } from '../stores/skillsStore'
 
 // ─── Nav sections ─────────────────────────────────────────────────────────────
 
 type SettingsSection =
   | 'profile' | 'general' | 'models' | 'appearance' | 'privacy' | 'usage'
   | 'connectors' | 'memory' | 'capabilities' | 'skills'
-  | 'workspace' | 'keybindings' | 'about'
+  | 'workspace' | 'keybindings' | 'about' | 'mobile'
 
 interface SettingsPageProps { onClose: () => void }
 
@@ -27,8 +30,8 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function SubSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-3">
-      <h3 className="text-[11px] font-semibold text-text-muted uppercase tracking-widest border-b border-border pb-2">
+    <div className="flex flex-col gap-4">
+      <h3 className="text-[10.5px] font-semibold text-text-muted uppercase tracking-widest">
         {title}
       </h3>
       {children}
@@ -60,7 +63,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
       onClick={() => onChange(!on)}
       className={`w-9 h-5 rounded-full transition-colors shrink-0 relative ${on ? 'bg-accent' : 'bg-surface-active'}`}
     >
-      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform shadow-sm ${on ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+      <span className={`absolute top-[3px] left-[3px] w-[14px] h-[14px] rounded-full bg-white transition-transform shadow-sm ${on ? 'translate-x-[16px]' : 'translate-x-0'}`} />
     </button>
   )
 }
@@ -95,10 +98,10 @@ function PillGroup<T extends string>({
         <button
           key={id}
           onClick={() => onChange(id)}
-          className={`py-2.5 rounded-xl border text-sm font-medium transition-colors ${
+          className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
             value === id
               ? 'bg-accent/15 border-accent/30 text-accent'
-              : 'bg-surface border-border text-text-muted hover:text-text-primary'
+              : 'bg-surface border-border text-text-muted hover:text-text-primary hover:border-border/80 hover:bg-surface-hover'
           }`}
         >
           {label}
@@ -325,19 +328,71 @@ const OLLAMA_MODELS = [
 
 function ModelsSection() {
   const {
+    claudeApiKey, setClaudeApiKey,
     defaultProvider, setDefaultProvider,
     defaultClaudeModel, setDefaultClaudeModel,
+    helmClaudeModel, setHelmClaudeModel,
     defaultOllamaModel, setDefaultOllamaModel,
     ollamaBaseUrl, setOllamaBaseUrl,
   } = useSettingsStore()
   const [urlDraft, setUrlDraft] = useState(ollamaBaseUrl)
+  const [keyDraft, setKeyDraft] = useState(claudeApiKey)
+  const [showKey, setShowKey] = useState(false)
+  const [keySaved, setKeySaved] = useState(false)
+
+  const saveKey = () => {
+    setClaudeApiKey(keyDraft.trim())
+    setKeySaved(true)
+    setTimeout(() => setKeySaved(false), 2000)
+  }
+  const keyValid = !keyDraft || (keyDraft.startsWith('sk-ant-') && keyDraft.length > 20)
 
   return (
     <div className="flex flex-col gap-8">
       <div>
         <SectionTitle>Models</SectionTitle>
-        <p className="text-sm text-text-muted">Configure which models Lumen uses for new conversations.</p>
+        <p className="text-sm text-text-muted">Configure which AI provider and models Lumen uses.</p>
       </div>
+
+      <SubSection title="Anthropic API Key">
+        <Field
+          label="API Key"
+          hint={claudeApiKey
+            ? '✓ Key is set — paste a new one to update'
+            : 'Required for Claude. Get yours at console.anthropic.com → API Keys'}
+        >
+          <div className="flex gap-2">
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={keyDraft}
+              onChange={(e) => setKeyDraft(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && saveKey()}
+              placeholder="sk-ant-api03-..."
+              className={`${inputClass} flex-1`}
+            />
+            <button
+              onClick={() => setShowKey((v) => !v)}
+              className="px-3 bg-surface border border-border rounded-lg text-xs text-text-muted hover:text-text-primary transition-colors"
+            >
+              {showKey ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          {keyDraft && !keyValid && (
+            <p className="text-[11.5px] text-amber-400 mt-1">Key format looks off — should start with sk-ant-</p>
+          )}
+        </Field>
+        <button
+          onClick={saveKey}
+          disabled={!keyDraft.trim() || !keyValid}
+          className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all
+            ${keySaved
+              ? 'bg-green-600 text-white'
+              : 'bg-accent text-white hover:bg-accent-hover active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed'
+            }`}
+        >
+          {keySaved ? '✓ Saved' : 'Save API Key'}
+        </button>
+      </SubSection>
 
       <SubSection title="Default Provider">
         <PillGroup
@@ -351,7 +406,8 @@ function ModelsSection() {
         />
       </SubSection>
 
-      <SubSection title="Claude Models">
+      <SubSection title="Chat Model">
+        <p className="text-xs text-text-muted -mt-2 mb-1">Used in Chat and Code modes.</p>
         <div className="flex flex-col gap-2">
           {CLAUDE_MODELS.map((m) => (
             <button
@@ -367,7 +423,30 @@ function ModelsSection() {
                 <p className="text-sm font-medium">{m.label}</p>
                 <p className="text-xs text-text-muted">{m.tier}</p>
               </div>
-              {defaultClaudeModel === m.value && <span className="text-xs text-accent font-medium">default</span>}
+              {defaultClaudeModel === m.value && <span className="text-xs text-accent font-medium">active</span>}
+            </button>
+          ))}
+        </div>
+      </SubSection>
+
+      <SubSection title="Helm Agent Model">
+        <p className="text-xs text-text-muted -mt-2 mb-1">Used for Helm dispatches. Haiku has a higher rate limit (50k TPM) and costs ~20× less than Sonnet — ideal for multi-step agent tasks.</p>
+        <div className="flex flex-col gap-2">
+          {CLAUDE_MODELS.map((m) => (
+            <button
+              key={m.value}
+              onClick={() => setHelmClaudeModel(m.value)}
+              className={`flex items-center justify-between px-4 py-3 rounded-xl border text-left transition-all ${
+                helmClaudeModel === m.value
+                  ? 'bg-accent/10 border-accent/30 text-text-primary'
+                  : 'bg-surface border-border text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              <div>
+                <p className="text-sm font-medium">{m.label}</p>
+                <p className="text-xs text-text-muted">{m.tier}</p>
+              </div>
+              {helmClaudeModel === m.value && <span className="text-xs text-accent font-medium">active</span>}
             </button>
           ))}
         </div>
@@ -452,14 +531,14 @@ function AppearanceSection() {
       </SubSection>
 
       <SubSection title="Interface">
-        <div className="flex flex-col divide-y divide-border/60">
+        <div className="flex flex-col divide-y divide-border/40 mt-1">
           {[
             { label: 'Show thinking blocks', desc: 'Expand Claude extended thinking in responses', on: showThinkingBlocks, onChange: setShowThinkingBlocks },
             { label: 'Animate messages', desc: 'Slide-in animation on new messages', on: animateMessages, onChange: setAnimateMessages },
             { label: 'Show streaming cursor', desc: 'Blinking cursor while generating', on: showStreamingCursor, onChange: setShowStreamingCursor },
             { label: 'Compact tool call cards', desc: 'Collapse tool results by default', on: compactToolCards, onChange: setCompactToolCards },
           ].map(({ label, desc, on, onChange }) => (
-            <div key={label} className="py-3">
+            <div key={label} className="py-3.5">
               <ToggleRow label={label} desc={desc} on={on} onChange={onChange} />
             </div>
           ))}
@@ -506,8 +585,9 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 function UsageSection() {
   const {
-    tokenInputMonth, tokenOutputMonth, tokenBudgetMonth,
-    setTokenBudgetMonth, tokenMonthKey,
+    tokenInputMonth, tokenOutputMonth,
+    tokenCacheReadMonth, tokenCacheWriteMonth,
+    tokenBudgetMonth, setTokenBudgetMonth, tokenMonthKey,
   } = useSettingsStore()
   const conversations = useChatStore((s) => s.conversations)
   const [budgetDraft, setBudgetDraft] = useState(String(tokenBudgetMonth))
@@ -533,8 +613,27 @@ function UsageSection() {
   const totalTokens = tokenInputMonth + tokenOutputMonth
   const budgetPct = tokenBudgetMonth > 0 ? Math.min((totalTokens / tokenBudgetMonth) * 100, 100) : 0
   const barColor = budgetPct > 90 ? '#f87171' : budgetPct > 70 ? '#fb923c' : '#8b5cf6'
-  const estCost = ((tokenInputMonth * 3 + tokenOutputMonth * 15) / 1_000_000).toFixed(2)
   const monthLabel = tokenMonthKey ? new Date(tokenMonthKey + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : ''
+
+  // Real cost breakdown using Sonnet 4.6 pricing (per 1M tokens)
+  // Cache reads cost 10% of base input price; cache writes cost 125%
+  const SONNET_IN  = 3.00;  const SONNET_OUT = 15.00
+  const CACHE_READ = 0.30;  const CACHE_WRITE = 3.75
+  const estCost = (
+    (tokenInputMonth      * SONNET_IN   / 1_000_000) +
+    (tokenOutputMonth     * SONNET_OUT  / 1_000_000) +
+    (tokenCacheReadMonth  * CACHE_READ  / 1_000_000) +
+    (tokenCacheWriteMonth * CACHE_WRITE / 1_000_000)
+  ).toFixed(3)
+  // What cost would have been without caching
+  const estCostNoCaching = (
+    ((tokenInputMonth + tokenCacheReadMonth) * SONNET_IN  / 1_000_000) +
+    (tokenOutputMonth                        * SONNET_OUT / 1_000_000)
+  ).toFixed(3)
+  const cacheSavings = Math.max(0, parseFloat(estCostNoCaching) - parseFloat(estCost)).toFixed(3)
+  const cacheHitPct = tokenCacheReadMonth > 0
+    ? Math.round((tokenCacheReadMonth / (tokenInputMonth + tokenCacheReadMonth)) * 100)
+    : 0
 
   return (
     <div className="flex flex-col gap-8">
@@ -573,11 +672,33 @@ function UsageSection() {
             <p className="text-xl font-bold text-text-primary tabular-nums">{tokenOutputMonth.toLocaleString()}</p>
             <p className="text-xs text-text-muted mt-0.5">Output tokens</p>
           </div>
+          <div className="px-4 py-3 bg-surface border border-border rounded-xl">
+            <p className="text-xl font-bold text-green-400 tabular-nums">{tokenCacheReadMonth.toLocaleString()}</p>
+            <p className="text-xs text-text-muted mt-0.5">Cache reads (10% price)</p>
+          </div>
+          <div className="px-4 py-3 bg-surface border border-border rounded-xl">
+            <p className="text-xl font-bold text-text-primary tabular-nums">{tokenCacheWriteMonth.toLocaleString()}</p>
+            <p className="text-xs text-text-muted mt-0.5">Cache writes</p>
+          </div>
         </div>
 
+        {/* Cache savings callout */}
+        {tokenCacheReadMonth > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 bg-green-500/5 border border-green-500/20 rounded-xl">
+            <div>
+              <p className="text-sm font-medium text-green-400">Cache hit rate: {cacheHitPct}%</p>
+              <p className="text-xs text-text-muted mt-0.5">Prompt caching saved you ~${cacheSavings} vs no caching</p>
+            </div>
+            <span className="text-2xl">💰</span>
+          </div>
+        )}
+
         <div className="p-3 bg-surface border border-border rounded-xl text-[12px] text-text-muted space-y-1 leading-snug">
-          <p>Token counts are <strong className="text-text-secondary">estimated</strong> from message character length (~4 chars/token). Resets on the 1st of each month.</p>
-          <p>Sonnet 4.5 pricing: <strong className="text-text-secondary">$3/M input · $15/M output</strong></p>
+          <p>Token counts from real API usage data. Resets on the 1st of each month.</p>
+          <p>Sonnet 4.6 pricing: <strong className="text-text-secondary">$3/M input · $15/M output · $0.30/M cache read · $3.75/M cache write</strong></p>
+          <p>Est. cost this month: <strong className="text-text-secondary">${estCost}</strong>
+            {parseFloat(cacheSavings) > 0 && <span className="text-green-400"> (saved ${cacheSavings} via cache)</span>}
+          </p>
         </div>
       </SubSection>
 
@@ -645,6 +766,144 @@ function UsageSection() {
           <button className="w-full py-2.5 px-4 rounded-xl border border-error/30 bg-error/5 text-sm text-error hover:bg-error/10 transition-colors text-left">
             Clear all conversations…
           </button>
+        </div>
+      </SubSection>
+    </div>
+  )
+}
+
+// ─── Section: Mobile Companion ───────────────────────────────────────────────
+
+function MobileSection() {
+  const {
+    mobileEnabled, setMobileEnabled,
+    mobileToken,   setMobileToken,
+    remoteDispatchEnabled, remoteDispatchPort,
+  } = useSettingsStore()
+
+  const [localToken, setLocalToken]   = useState(mobileToken)
+  const [serverIPs, setServerIPs]     = useState<string[]>([])
+  const [copied, setCopied]           = useState(false)
+
+  // Load LAN IPs from main process
+  useEffect(() => {
+    window.tower?.remoteDispatch?.getIPs?.().then((ips: string[]) => setServerIPs(ips ?? []))
+  }, [])
+
+  // Keep local draft in sync if store changes from elsewhere
+  useEffect(() => { setLocalToken(mobileToken) }, [mobileToken])
+
+  function handleTokenSave() {
+    setMobileToken(localToken.trim())
+  }
+
+  function handleGenerate() {
+    const token = Array.from(crypto.getRandomValues(new Uint8Array(18)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('')
+    setLocalToken(token)
+    setMobileToken(token)
+  }
+
+  const port = remoteDispatchEnabled ? remoteDispatchPort : 7747
+  const lanUrls = serverIPs.map(ip => `http://${ip}:${port}`)
+
+  function copyUrl(url: string) {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    })
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      <div>
+        <SectionTitle>Mobile Companion</SectionTitle>
+        <p className="text-sm text-text-muted">
+          Access Lumen from your phone's browser — same network, no cloud required.
+        </p>
+      </div>
+
+      <SubSection title="Access">
+        <ToggleRow
+          label="Enable Mobile Companion"
+          desc="Serve the mobile PWA at the root of the 7747 HTTP server."
+          on={mobileEnabled}
+          onChange={setMobileEnabled}
+        />
+
+        {!remoteDispatchEnabled && mobileEnabled && (
+          <div className="px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
+            Remote Dispatch is currently off. Enable it in General → Remote Dispatch to start the HTTP server.
+          </div>
+        )}
+
+        {mobileEnabled && lanUrls.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="text-[12px] text-text-muted">Open on your phone (same Wi-Fi network):</p>
+            {lanUrls.map(url => (
+              <button
+                key={url}
+                onClick={() => copyUrl(url)}
+                className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg bg-surface border border-border hover:border-accent/40 transition-colors group"
+              >
+                <code className="text-[13px] text-accent font-mono">{url}</code>
+                <span className="text-[11px] text-text-muted group-hover:text-text-primary transition-colors shrink-0">
+                  {copied ? '✓ Copied' : 'Copy'}
+                </span>
+              </button>
+            ))}
+            <p className="text-[11px] text-text-muted">
+              Add to home screen in your browser's share menu for a full-screen PWA experience.
+            </p>
+          </div>
+        )}
+      </SubSection>
+
+      <SubSection title="Auth Token">
+        <Field
+          label="Token"
+          hint={
+            mobileToken
+              ? 'Required on all API requests as the x-lumen-token header or ?token= query param. Leave blank to disable auth.'
+              : 'No token set — anyone on your network can access this server. Set a token to require authentication.'
+          }
+        >
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={localToken}
+              onChange={e => setLocalToken(e.target.value)}
+              placeholder="Leave blank to skip auth"
+              className={`${inputClass} flex-1 font-mono text-[12px]`}
+            />
+            <button
+              onClick={handleTokenSave}
+              className="px-3 bg-surface border border-border rounded-lg text-xs text-text-muted hover:text-text-primary transition-colors whitespace-nowrap"
+            >
+              Save
+            </button>
+          </div>
+          <button
+            onClick={handleGenerate}
+            className="self-start text-[11.5px] text-accent hover:text-accent/80 transition-colors"
+          >
+            Generate new token
+          </button>
+        </Field>
+        {!mobileToken && (
+          <div className="px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
+            No token set. Anyone on your local network can chat with your Claude API key. Only do this on a trusted network.
+          </div>
+        )}
+      </SubSection>
+
+      <SubSection title="How it Works">
+        <div className="flex flex-col gap-3 text-[12.5px] text-text-muted leading-relaxed">
+          <p>1. Enable Mobile Companion and make sure Remote Dispatch is on (General → Remote Dispatch).</p>
+          <p>2. Open the URL above on your phone's browser while on the same Wi-Fi.</p>
+          <p>3. In Safari or Chrome, tap Share → Add to Home Screen for a standalone PWA.</p>
+          <p>4. Set an auth token and enter it in the app's settings on first launch.</p>
         </div>
       </SubSection>
     </div>
@@ -753,35 +1012,145 @@ function ConnectorsSection() {
   )
 }
 
-// ─── Section: Memory ─────────────────────────────────────────────────────────
+/// ─── Section: Memory ─────────────────────────────────────────────────────────
+
+const TAG_COLORS: Record<MemoryTag, string> = {
+  fact:       'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  preference: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
+  project:    'bg-green-500/10 text-green-400 border-green-500/20',
+  person:     'bg-orange-500/10 text-orange-400 border-orange-500/20',
+  context:    'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+  note:       'bg-gray-500/10 text-gray-400 border-gray-500/20',
+}
 
 function MemorySection() {
-  const { memorySearchRef, setMemorySearchRef, memoryGenerate, setMemoryGenerate } = useSettingsStore()
+  const { memorySearchRef, setMemorySearchRef, memoryGenerate, setMemoryGenerate, vaultPath } = useSettingsStore()
+  const { items, addMemory, deleteMemory, pinMemory, clearAll } = useMemoryStore()
+  const [newContent, setNewContent] = useState('')
+  const [newTag, setNewTag] = useState<MemoryTag>('fact')
+  const [syncing, setSyncing] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<string | null>(null)
+
+  const allItems = Object.values(items).sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+    return b.updatedAt - a.updatedAt
+  })
+
+  const handleAdd = () => {
+    if (!newContent.trim()) return
+    addMemory(newContent.trim(), newTag, 'manual')
+    setNewContent('')
+  }
+
+  const handleSyncVault = async () => {
+    if (!vaultPath) return
+    setSyncing(true)
+    setSyncStatus(null)
+    const ok = await syncMemoriesToVault(vaultPath)
+    setSyncing(false)
+    setSyncStatus(ok ? '✓ Synced to vault' : '✗ Sync failed')
+    setTimeout(() => setSyncStatus(null), 3000)
+  }
 
   return (
     <div className="flex flex-col gap-8">
       <div>
         <SectionTitle>Memory</SectionTitle>
-        <p className="text-sm text-text-muted">Control how Lumen stores and uses context from your conversations.</p>
+        <p className="text-sm text-text-muted">Lumen remembers facts, preferences, and context across conversations.</p>
       </div>
 
-      <SubSection title="Memory Settings">
-        <div className="flex flex-col divide-y divide-border/60">
-          <div className="py-3">
-            <ToggleRow label="Search & reference memory" desc="Lumen can reference saved context to personalize responses" on={memorySearchRef} onChange={setMemorySearchRef} />
+      <SubSection title="Settings">
+        <div className="flex flex-col divide-y divide-border/40 mt-1">
+          <div className="py-3.5">
+            <ToggleRow label="Inject memory into conversations" desc="Relevant memories are added to Claude's context automatically" on={memorySearchRef} onChange={setMemorySearchRef} />
           </div>
-          <div className="py-3">
-            <ToggleRow label="Generate memories from history" desc="Automatically save key facts and preferences from conversations" on={memoryGenerate} onChange={setMemoryGenerate} />
+          <div className="py-3.5">
+            <ToggleRow label="Auto-generate from conversations" desc="Extract and save key facts after each conversation ends" on={memoryGenerate} onChange={setMemoryGenerate} />
           </div>
         </div>
         <p className="text-xs text-text-muted">Memory is stored locally and never sent to Anthropic.</p>
       </SubSection>
 
-      <SubSection title="Saved Memories">
-        <div className="flex flex-col items-center justify-center h-20 gap-2 border border-dashed border-border rounded-xl">
-          <p className="text-sm text-text-muted">No memories saved yet</p>
-          <p className="text-xs text-text-muted">Enable "Generate memories" above to start building context</p>
+      <SubSection title={`Saved Memories (${allItems.length})`}>
+        {/* Add new memory */}
+        <div className="flex flex-col gap-2 p-3.5 bg-surface rounded-xl border border-border">
+          <textarea
+            value={newContent}
+            onChange={(e) => setNewContent(e.target.value)}
+            placeholder="Add a memory... e.g. 'Will works at a credit union and is learning cybersecurity'"
+            rows={2}
+            className={`${inputClass} resize-none leading-relaxed`}
+            onKeyDown={(e) => { if (e.key === 'Enter' && e.metaKey) handleAdd() }}
+          />
+          <div className="flex items-center gap-2">
+            <select
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value as MemoryTag)}
+              className={`${inputClass} flex-1 text-[12px]`}
+            >
+              {(['fact', 'preference', 'project', 'person', 'context', 'note'] as MemoryTag[]).map((t) => (
+                <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleAdd}
+              disabled={!newContent.trim()}
+              className="px-3 py-1.5 bg-accent text-white text-[12px] font-semibold rounded-lg hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Add
+            </button>
+          </div>
         </div>
+
+        {/* Memory list */}
+        {allItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-20 gap-1 border border-dashed border-border rounded-xl">
+            <p className="text-sm text-text-muted">No memories yet</p>
+            <p className="text-[11px] text-text-muted">Enable auto-generate or add manually above</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
+            {allItems.map((item) => (
+              <div key={item.id} className="flex items-start gap-2.5 p-3 bg-surface rounded-lg border border-border group">
+                <button
+                  onClick={() => pinMemory(item.id, !item.pinned)}
+                  className={`mt-0.5 shrink-0 text-sm transition-opacity ${item.pinned ? 'opacity-100' : 'opacity-20 group-hover:opacity-60'}`}
+                  title={item.pinned ? 'Unpin' : 'Pin (always inject)'}
+                >📌</button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12.5px] text-text-primary leading-snug">{item.content}</p>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className={`text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border ${TAG_COLORS[item.tag]}`}>{item.tag}</span>
+                    <span className="text-[10px] text-text-muted">{item.source}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => deleteMemory(item.id)}
+                  className="shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 text-text-muted hover:text-error transition-all text-sm"
+                >✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {allItems.length > 0 && (
+          <div className="flex items-center gap-2 pt-1">
+            {vaultPath && (
+              <button
+                onClick={handleSyncVault}
+                disabled={syncing}
+                className="text-[12px] text-accent hover:underline disabled:opacity-50"
+              >
+                {syncing ? 'Syncing…' : 'Sync to Obsidian vault'}
+              </button>
+            )}
+            {syncStatus && <span className="text-[12px] text-text-muted">{syncStatus}</span>}
+            <div className="flex-1" />
+            <button onClick={clearAll} className="text-[12px] text-text-muted hover:text-error transition-colors">
+              Clear all
+            </button>
+          </div>
+        )}
       </SubSection>
     </div>
   )
@@ -875,55 +1244,538 @@ function CapabilitiesSection() {
   )
 }
 
-// ─── Section: Skills ──────────────────────────────────────────────────────────
+/// ─── Section: Skills ──────────────────────────────────────────────────────────
+
+const EMPTY_SKILL: Omit<Skill, 'id' | 'createdAt' | 'updatedAt' | 'enabled'> = {
+  name: '', description: '', icon: '⚡', prompt: '',
+  trigger: { type: 'manual', keywords: [] },
+}
 
 function SkillsSection() {
+  const { skills, createSkill, updateSkill, deleteSkill, toggleSkill } = useSkillsStore()
+  const [editing, setEditing]   = useState<string | null>(null)  // skill id or 'new'
+  const [draft, setDraft]       = useState<typeof EMPTY_SKILL>(EMPTY_SKILL)
+  const [keywordInput, setKeywordInput] = useState('')
+
+  const allSkills = Object.values(skills).sort((a, b) => a.createdAt - b.createdAt)
+
+  const openNew = () => {
+    setDraft(EMPTY_SKILL)
+    setKeywordInput('')
+    setEditing('new')
+  }
+
+  const openEdit = (skill: Skill) => {
+    setDraft({
+      name: skill.name, description: skill.description, icon: skill.icon,
+      prompt: skill.prompt, trigger: { ...skill.trigger, keywords: [...skill.trigger.keywords] },
+    })
+    setKeywordInput(skill.trigger.keywords.join(', '))
+    setEditing(skill.id)
+  }
+
+  const handleSave = () => {
+    if (!draft.name.trim() || !draft.prompt.trim()) return
+    const keywords = keywordInput.split(',').map((k) => k.trim()).filter(Boolean)
+    const trigger = { ...draft.trigger, keywords }
+    if (editing === 'new') {
+      createSkill({ ...draft, trigger })
+    } else if (editing) {
+      updateSkill(editing, { ...draft, trigger })
+    }
+    setEditing(null)
+  }
+
+  const patchDraft = (patch: Partial<typeof EMPTY_SKILL>) =>
+    setDraft((d) => ({ ...d, ...patch }))
+
   return (
     <div className="flex flex-col gap-8">
       <div>
         <SectionTitle>Skills & Triggers</SectionTitle>
-        <p className="text-sm text-text-muted">Install skills that extend what Lumen can do, and set triggers to activate them automatically.</p>
+        <p className="text-sm text-text-muted">Skills are named prompt injections that activate manually or auto-trigger on keywords.</p>
       </div>
 
-      <SubSection title="Installed Skills">
-        <div className="flex flex-col items-center justify-center h-28 gap-2 border border-dashed border-border rounded-xl">
-          <p className="text-sm text-text-muted">No skills installed</p>
-          <p className="text-xs text-text-muted">Skills let Claude do specialized tasks — analyze files, run reports, send emails, and more</p>
-        </div>
-      </SubSection>
+      {/* Skill editor */}
+      {editing !== null && (
+        <div className="flex flex-col gap-4 p-4 bg-surface rounded-xl border border-accent/20">
+          <p className="text-[12px] font-semibold text-accent uppercase tracking-wide">
+            {editing === 'new' ? 'New Skill' : 'Edit Skill'}
+          </p>
 
-      <SubSection title="Triggers">
-        <div className="flex flex-col items-center justify-center h-20 gap-2 border border-dashed border-border rounded-xl">
-          <p className="text-sm text-text-muted">No triggers configured</p>
-          <p className="text-xs text-text-muted">Triggers fire skills automatically based on conditions (e.g. time, keywords, events)</p>
-        </div>
-      </SubSection>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={draft.icon}
+              onChange={(e) => patchDraft({ icon: e.target.value })}
+              className={`${inputClass} w-12 text-center text-lg`}
+              maxLength={2}
+              placeholder="⚡"
+            />
+            <input
+              type="text"
+              value={draft.name}
+              onChange={(e) => patchDraft({ name: e.target.value })}
+              placeholder="Skill name"
+              className={`${inputClass} flex-1`}
+            />
+          </div>
 
-      <button className="flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-border text-sm text-text-muted hover:text-text-primary hover:border-text-muted transition-colors">
-        <span className="text-lg leading-none">+</span>
-        <span>Browse skill marketplace</span>
-      </button>
+          <input
+            type="text"
+            value={draft.description}
+            onChange={(e) => patchDraft({ description: e.target.value })}
+            placeholder="Short description (shown in skills list)"
+            className={inputClass}
+          />
+
+          <textarea
+            value={draft.prompt}
+            onChange={(e) => patchDraft({ prompt: e.target.value })}
+            placeholder="System prompt injected when this skill is active..."
+            rows={4}
+            className={`${inputClass} resize-none leading-relaxed font-mono text-[12px]`}
+          />
+
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-text-secondary w-20 shrink-0">Trigger</span>
+              <select
+                value={draft.trigger.type}
+                onChange={(e) => patchDraft({ trigger: { ...draft.trigger, type: e.target.value as TriggerType } })}
+                className={`${inputClass} flex-1 text-[12px]`}
+              >
+                <option value="manual">Manual only</option>
+                <option value="keyword">Keyword match</option>
+                <option value="always">Always active</option>
+              </select>
+            </div>
+            {draft.trigger.type === 'keyword' && (
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] text-text-secondary w-20 shrink-0">Keywords</span>
+                <input
+                  type="text"
+                  value={keywordInput}
+                  onChange={(e) => setKeywordInput(e.target.value)}
+                  placeholder="research, look up, investigate (comma-separated)"
+                  className={`${inputClass} flex-1 text-[12px]`}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={() => setEditing(null)}
+              className="px-3 py-1.5 text-[12px] text-text-muted hover:text-text-primary border border-border rounded-lg transition-colors"
+            >Cancel</button>
+            <button
+              onClick={handleSave}
+              disabled={!draft.name.trim() || !draft.prompt.trim()}
+              className="px-3 py-1.5 text-[12px] font-semibold bg-accent text-white rounded-lg hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >Save skill</button>
+          </div>
+        </div>
+      )}
+
+      {/* Skills list */}
+      <SubSection title={`Installed Skills (${allSkills.length})`}>
+        {allSkills.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-24 gap-1 border border-dashed border-border rounded-xl">
+            <p className="text-sm text-text-muted">No skills yet</p>
+            <p className="text-[11px] text-text-muted">Skills inject prompts into conversations to extend Claude's behavior</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {allSkills.map((skill) => (
+              <div key={skill.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${skill.enabled ? 'bg-surface border-border' : 'bg-surface/50 border-border/40 opacity-60'}`}>
+                <span className="text-xl shrink-0 w-8 text-center">{skill.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[13px] font-medium text-text-primary">{skill.name}</p>
+                    <span className={`text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded border ${
+                      skill.trigger.type === 'always' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
+                      skill.trigger.type === 'keyword' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                      'bg-surface-hover text-text-muted border-border/60'
+                    }`}>{skill.trigger.type}</span>
+                  </div>
+                  {skill.description && <p className="text-[11.5px] text-text-muted mt-0.5 truncate">{skill.description}</p>}
+                  {skill.trigger.type === 'keyword' && skill.trigger.keywords.length > 0 && (
+                    <p className="text-[10.5px] text-text-muted mt-0.5">
+                      Keywords: {skill.trigger.keywords.slice(0, 4).join(', ')}
+                      {skill.trigger.keywords.length > 4 ? ` +${skill.trigger.keywords.length - 4}` : ''}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => openEdit(skill)} className="p-1.5 text-text-muted hover:text-text-primary rounded-lg hover:bg-surface-hover transition-colors text-sm">✏️</button>
+                  {!skill.id.startsWith('builtin-') && (
+                    <button onClick={() => deleteSkill(skill.id)} className="p-1.5 text-text-muted hover:text-error rounded-lg hover:bg-surface-hover transition-colors text-sm">✕</button>
+                  )}
+                  <Toggle on={skill.enabled} onChange={() => toggleSkill(skill.id)} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button
+          onClick={openNew}
+          className="flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-border text-sm text-text-muted hover:text-text-primary hover:border-accent/40 transition-colors"
+        >
+          <span className="text-lg leading-none">+</span>
+          <span>Create new skill</span>
+        </button>
+      </SubSection>
     </div>
   )
 }
 
-// ─── Section: Workspace ───────────────────────────────────────────────────────
+/// ─── Section: Workspace ───────────────────────────────────────────────────────
 
 function WorkspaceSection() {
+  const {
+    vaultPath, setVaultPath,
+    vaultRagEnabled, setVaultRagEnabled,
+    vaultEmbedModel, setVaultEmbedModel,
+    remoteDispatchEnabled, setRemoteDispatchEnabled,
+    remoteDispatchPort, setRemoteDispatchPort,
+    ollamaBaseUrl,
+  } = useSettingsStore()
+  const [vaultInput, setVaultInput] = useState(vaultPath)
+  const [vaultStats, setVaultStats] = useState<{ fileCount?: number; error?: string } | null>(null)
+  const [vaultSearchQuery, setVaultSearchQuery] = useState('')
+  const [vaultSearchResults, setVaultSearchResults] = useState<{ file: string; snippet: string }[]>([])
+  const [searching, setSearching] = useState(false)
+  const [dispatchPortInput, setDispatchPortInput] = useState(String(remoteDispatchPort))
+  const [serverIPs, setServerIPs] = useState<string[]>([])
+
+  // Semantic index state
+  const [embedModelInput, setEmbedModelInput] = useState(vaultEmbedModel)
+  const [indexMeta, setIndexMeta] = useState<{
+    exists: boolean; builtAt?: number; model?: string; fileCount?: number; chunkCount?: number
+  } | null>(null)
+  const [indexing, setIndexing] = useState(false)
+  const [indexProgress, setIndexProgress] = useState<{ done: number; total: number; currentFile: string } | null>(null)
+  const [indexError, setIndexError] = useState<string | null>(null)
+
+  const tower = (window as any).tower
+
+  // Load current server IPs when remote dispatch is enabled
+  useEffect(() => {
+    if (!remoteDispatchEnabled) { setServerIPs([]); return }
+    tower?.remoteDispatch?.getIPs?.().then((ips: string[]) => setServerIPs(ips ?? []))
+    // Also listen for server-started events to refresh IP display
+    const cleanup = tower?.remoteDispatch?.onServerStarted?.((data: { ips: string[] }) => {
+      setServerIPs(data.ips ?? [])
+    })
+    return () => { if (typeof cleanup === 'function') cleanup() }
+  }, [remoteDispatchEnabled])
+
+  // Load vault stats when vaultPath changes
+  useEffect(() => {
+    if (!vaultPath || !tower?.vault) { setVaultStats(null); return }
+    tower.vault.getStats().then(setVaultStats)
+  }, [vaultPath])
+
+  // Load index metadata on mount
+  useEffect(() => {
+    tower?.vault?.indexMeta?.().then(setIndexMeta)
+  }, [])
+
+  // Index build handler
+  const handleBuildIndex = async () => {
+    if (!vaultPath || indexing) return
+    setIndexing(true)
+    setIndexError(null)
+    setIndexProgress({ done: 0, total: 0, currentFile: '' })
+
+    // Subscribe to progress events
+    const cleanup = tower?.vault?.onIndexProgress?.((data: { done: number; total: number; currentFile: string }) => {
+      setIndexProgress(data)
+    })
+
+    try {
+      const result = await tower.vault.buildIndex({
+        ollamaBaseUrl,
+        model: embedModelInput || vaultEmbedModel,
+      })
+      if (result.error) {
+        setIndexError(result.error)
+      } else {
+        setVaultEmbedModel(embedModelInput || vaultEmbedModel)
+        // Refresh metadata
+        const meta = await tower.vault.indexMeta()
+        setIndexMeta(meta)
+        setIndexProgress(null)
+      }
+    } catch (err: unknown) {
+      setIndexError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setIndexing(false)
+      if (typeof cleanup === 'function') cleanup()
+    }
+  }
+
+  const handleClearIndex = async () => {
+    await tower?.vault?.clearIndex?.()
+    setIndexMeta({ exists: false })
+    setIndexProgress(null)
+    setIndexError(null)
+  }
+
+  const handleSaveVaultPath = () => {
+    const trimmed = vaultInput.trim()
+    setVaultPath(trimmed)
+    tower?.vault?.setPath?.(trimmed)
+  }
+
+  const handlePickFolder = async () => {
+    const result = await tower?.openFolderDialog?.()
+    if (result) {
+      setVaultInput(result)
+      setVaultPath(result)
+      tower?.vault?.setPath?.(result)
+    }
+  }
+
+  const handleSearch = async () => {
+    if (!vaultSearchQuery.trim() || !vaultPath) return
+    setSearching(true)
+    const res = await tower?.vault?.search?.(vaultSearchQuery.trim())
+    setSearching(false)
+    setVaultSearchResults(res?.results ?? [])
+  }
+
   return (
     <div className="flex flex-col gap-8">
       <div>
         <SectionTitle>Workspace</SectionTitle>
-        <p className="text-sm text-text-muted">Configure how Lumen's agents operate.</p>
+        <p className="text-sm text-text-muted">Connect Lumen to your Obsidian vault and configure agent behavior.</p>
       </div>
 
-      <SubSection title="System Prompt">
-        <Field label="Global system prompt" hint="Prepended to every conversation. Leave blank for default.">
-          <textarea rows={4} placeholder="e.g. You are a helpful assistant. Always respond concisely..." className={`${inputClass} resize-none leading-relaxed`} />
-        </Field>
+      {/* Vault / Obsidian */}
+      <SubSection title="Obsidian Vault">
+        <div className="flex flex-col gap-3">
+          <p className="text-[12.5px] text-text-muted leading-relaxed">
+            Point Lumen at your Obsidian vault folder. Claude can then read notes, write session logs, and sync memories — all staying local.
+          </p>
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={vaultInput}
+              onChange={(e) => setVaultInput(e.target.value)}
+              placeholder="E:\Obsidian\SpiritVault"
+              className={`${inputClass} flex-1 font-mono text-[12px]`}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSaveVaultPath() }}
+            />
+            <button onClick={handlePickFolder} className="px-3 py-1.5 text-[12px] border border-border rounded-lg text-text-muted hover:text-text-primary hover:border-border/80 transition-colors shrink-0">Browse…</button>
+            <button onClick={handleSaveVaultPath} className="px-3 py-1.5 text-[12px] font-semibold bg-accent/10 border border-accent/30 text-accent rounded-lg hover:bg-accent/20 transition-colors shrink-0">Set</button>
+          </div>
+
+          {vaultStats && !vaultStats.error && (
+            <div className="flex items-center gap-2 text-[12px] text-green-400">
+              <span>✓</span>
+              <span>Connected — {vaultStats.fileCount?.toLocaleString()} notes found</span>
+            </div>
+          )}
+          {vaultStats?.error && (
+            <p className="text-[12px] text-error">Could not read vault: {vaultStats.error}</p>
+          )}
+
+          {/* Vault RAG toggle */}
+          {vaultPath && (
+            <div className="flex items-center justify-between py-2 border-t border-border mt-1">
+              <div>
+                <p className="text-[13px] font-medium text-text-secondary">Inject vault context</p>
+                <p className="text-[11.5px] text-text-muted">Automatically search your vault and inject relevant notes into Claude's context with each message.</p>
+              </div>
+              <Toggle on={vaultRagEnabled} onChange={setVaultRagEnabled} />
+            </div>
+          )}
+        </div>
       </SubSection>
 
-      <SubSection title="Tool Limits">
+      {/* Semantic Index */}
+      {vaultPath && (
+        <SubSection title="Semantic Index (Embeddings)">
+          <div className="flex flex-col gap-3">
+            <p className="text-[12.5px] text-text-muted leading-relaxed">
+              Build a vector index of your vault using <span className="text-text-secondary font-medium">Ollama embeddings</span> on your Unraid server.
+              Once indexed, vault context injection uses semantic similarity instead of keyword matching — finds relevant notes even when your query doesn't share exact words.
+            </p>
+
+            <Field label="Embedding model" hint="Must be pulled in Ollama. Recommended: nomic-embed-text (137MB, fast) or mxbai-embed-large (670MB, more accurate).">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={embedModelInput}
+                  onChange={(e) => setEmbedModelInput(e.target.value)}
+                  placeholder="nomic-embed-text"
+                  className={`${inputClass} flex-1 font-mono text-[12px]`}
+                />
+              </div>
+            </Field>
+
+            <p className="text-[11.5px] text-text-muted">
+              Ollama URL: <span className="font-mono text-accent">{ollamaBaseUrl || 'Not set — configure in Settings → Models'}</span>
+            </p>
+
+            {/* Index metadata */}
+            {indexMeta?.exists && (
+              <div className="p-3 bg-surface rounded-lg border border-border flex flex-col gap-1">
+                <p className="text-[11.5px] font-semibold text-green-400">✓ Index built</p>
+                <p className="text-[11px] text-text-muted">
+                  {indexMeta.chunkCount?.toLocaleString()} chunks from {indexMeta.fileCount?.toLocaleString()} files
+                  · Model: <span className="font-mono">{indexMeta.model}</span>
+                  · Built {indexMeta.builtAt ? new Date(indexMeta.builtAt).toLocaleDateString() : '?'}
+                </p>
+              </div>
+            )}
+
+            {/* Progress bar */}
+            {indexing && indexProgress && (
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between text-[11px] text-text-muted">
+                  <span>Indexing… {indexProgress.currentFile}</span>
+                  <span>{indexProgress.done}/{indexProgress.total} files</span>
+                </div>
+                <div className="h-1.5 bg-surface rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-accent rounded-full transition-all duration-200"
+                    style={{ width: indexProgress.total > 0 ? `${(indexProgress.done / indexProgress.total) * 100}%` : '0%' }}
+                  />
+                </div>
+                <p className="text-[11px] text-text-muted">This runs through Ollama on your Unraid server — speed depends on your network and GPU.</p>
+              </div>
+            )}
+
+            {indexError && (
+              <div className="p-2.5 bg-error/10 border border-error/30 rounded-lg">
+                <p className="text-[12px] text-error">{indexError}</p>
+                <p className="text-[11px] text-text-muted mt-1">Make sure: (1) Ollama is running on Unraid, (2) the model is pulled (<span className="font-mono">ollama pull {embedModelInput}</span>), (3) the Ollama URL in Settings → Models is correct.</p>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleBuildIndex}
+                disabled={indexing || !ollamaBaseUrl}
+                className="px-3 py-1.5 text-[12px] font-semibold bg-accent/10 border border-accent/30 text-accent rounded-lg hover:bg-accent/20 disabled:opacity-40 transition-colors"
+              >
+                {indexing ? '⏳ Indexing…' : indexMeta?.exists ? '↺ Re-index Vault' : '⚡ Build Semantic Index'}
+              </button>
+              {indexMeta?.exists && (
+                <button
+                  onClick={handleClearIndex}
+                  disabled={indexing}
+                  className="px-3 py-1.5 text-[12px] text-text-muted border border-border rounded-lg hover:text-error hover:border-error/40 disabled:opacity-40 transition-colors"
+                >
+                  Clear Index
+                </button>
+              )}
+            </div>
+          </div>
+        </SubSection>
+      )}
+
+
+      {/* Vault search */}
+      {vaultPath && (
+        <SubSection title="Search Vault">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={vaultSearchQuery}
+              onChange={(e) => setVaultSearchQuery(e.target.value)}
+              placeholder="Search your notes…"
+              className={`${inputClass} flex-1`}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSearch() }}
+            />
+            <button
+              onClick={handleSearch}
+              disabled={searching || !vaultSearchQuery.trim()}
+              className="px-3 py-1.5 text-[12px] font-semibold bg-accent text-white rounded-lg hover:bg-accent-hover disabled:opacity-40 transition-colors"
+            >
+              {searching ? '…' : 'Search'}
+            </button>
+          </div>
+          {vaultSearchResults.length > 0 && (
+            <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
+              {vaultSearchResults.map((r, i) => (
+                <div key={i} className="p-3 bg-surface rounded-lg border border-border">
+                  <p className="text-[11px] font-mono text-accent truncate mb-1">{r.file.replace(vaultPath, '').replace(/\\/g, '/')}</p>
+                  <p className="text-[12px] text-text-secondary leading-snug whitespace-pre-wrap">{r.snippet}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {vaultSearchResults.length === 0 && vaultSearchQuery && !searching && (
+            <p className="text-[12px] text-text-muted">No results for "{vaultSearchQuery}"</p>
+          )}
+        </SubSection>
+      )}
+
+      {/* Remote Dispatch */}
+      <SubSection title="Remote Dispatch">
+        <div className="flex flex-col gap-3">
+          <p className="text-[12.5px] text-text-muted leading-relaxed">
+            Start a local HTTP server so your phone or any script can send tasks to Lumen.
+            POST to <span className="font-mono text-accent">http://YOUR_IP:{remoteDispatchPort}/dispatch</span> with <span className="font-mono text-accent text-[11px]">{"{ \"text\": \"do something\" }"}</span>
+          </p>
+
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="text-[13px] font-medium text-text-secondary">Enable remote dispatch</p>
+              <p className="text-[11.5px] text-text-muted">Listens on all network interfaces — use only on trusted networks.</p>
+            </div>
+            <Toggle on={remoteDispatchEnabled} onChange={(v) => {
+              setRemoteDispatchEnabled(v)
+              if (v) tower?.remoteDispatch?.start?.(remoteDispatchPort, '')
+              else    tower?.remoteDispatch?.stop?.()
+            }} />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Field label="Port" hint="">
+              <input
+                type="number"
+                value={dispatchPortInput}
+                onChange={(e) => setDispatchPortInput(e.target.value)}
+                onBlur={() => {
+                  const p = parseInt(dispatchPortInput)
+                  if (!isNaN(p) && p > 1024 && p < 65535) {
+                    setRemoteDispatchPort(p)
+                    if (remoteDispatchEnabled) tower?.remoteDispatch?.start?.(p, '')
+                  }
+                }}
+                className={`${inputClass} w-28 font-mono`}
+                min={1025} max={65534}
+              />
+            </Field>
+          </div>
+
+          {remoteDispatchEnabled && serverIPs.length > 0 && (
+            <div className="flex flex-col gap-1.5 p-3 bg-surface rounded-lg border border-green-500/20">
+              <p className="text-[11.5px] font-semibold text-green-400">✓ Server running — POST to:</p>
+              {serverIPs.map((ip) => (
+                <p key={ip} className="text-[12px] font-mono text-text-secondary">
+                  http://{ip}:{remoteDispatchPort}/dispatch
+                </p>
+              ))}
+              <p className="text-[11px] text-text-muted mt-1">Example: <span className="font-mono">{"curl -X POST http://IP:PORT/dispatch -H 'Content-Type: application/json' -d '{\"text\":\"summarize my last meeting\"}'"}  </span></p>
+            </div>
+          )}
+
+          {remoteDispatchEnabled && serverIPs.length === 0 && (
+            <p className="text-[12px] text-text-muted">Starting server… (check that port {remoteDispatchPort} is available)</p>
+          )}
+        </div>
+      </SubSection>
+
+      {/* Agent config */}
+      <SubSection title="Agent Behavior">
         <div className="grid grid-cols-2 gap-4">
           <Field label="Max tool calls / turn" hint="Safety limit per agent turn.">
             <input type="number" defaultValue={25} min={1} max={100} className={inputClass} />
@@ -978,58 +1830,6 @@ function KeybindingsSection() {
   )
 }
 
-// ─── Section: Account ─────────────────────────────────────────────────────────
-
-function AccountSection() {
-  const { claudeApiKey, setClaudeApiKey, profileName, profileCallName } = useSettingsStore()
-  const [draft, setDraft] = useState(claudeApiKey)
-  const [show, setShow] = useState(false)
-  const [saved, setSaved] = useState(false)
-
-  const save = () => { setClaudeApiKey(draft.trim()); setSaved(true); setTimeout(() => setSaved(false), 2000) }
-  const isValid = !draft || (draft.startsWith('sk-ant-') && draft.length > 20)
-
-  return (
-    <div className="flex flex-col gap-8">
-      <div>
-        <SectionTitle>Account</SectionTitle>
-        <p className="text-sm text-text-muted">Manage your API credentials.</p>
-      </div>
-
-      <SubSection title="Profile">
-        <div className="flex items-center gap-4 p-4 bg-surface border border-border rounded-xl">
-          <div className="w-12 h-12 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center shrink-0">
-            <span className="text-lg font-semibold text-accent">
-              {(profileCallName || profileName || 'W').charAt(0).toUpperCase()}
-            </span>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-text-primary">{profileName || 'Will Medina'}</p>
-            <p className="text-xs text-text-muted">
-              {profileCallName ? `Goes by: ${profileCallName}` : 'Set your name in Profile'}
-            </p>
-          </div>
-        </div>
-      </SubSection>
-
-      <SubSection title="Anthropic API Key">
-        <Field label="API Key" hint={!claudeApiKey ? 'Get your key at console.anthropic.com → API Keys' : 'Key is set. Update below.'}>
-          <div className="flex gap-2">
-            <input type={show ? 'text' : 'password'} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="sk-ant-api03-..." className={`${inputClass} flex-1`} />
-            <button onClick={() => setShow((v) => !v)} className="px-3 bg-surface border border-border rounded-lg text-xs text-text-muted hover:text-text-primary transition-colors">
-              {show ? 'Hide' : 'Show'}
-            </button>
-          </div>
-          {draft && !isValid && <p className="text-[11.5px] text-amber-400 mt-1">Key format looks off — should start with sk-ant-</p>}
-        </Field>
-        <button onClick={save} className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${saved ? 'bg-green-600 text-white' : 'bg-accent text-white hover:bg-accent-hover active:scale-95'}`}>
-          {saved ? '✓ Saved' : 'Save API Key'}
-        </button>
-      </SubSection>
-    </div>
-  )
-}
-
 // ─── Section: About ───────────────────────────────────────────────────────────
 
 function AboutSection() {
@@ -1072,6 +1872,7 @@ const NAV: { id: SettingsSection; label: string; icon: string; group: string }[]
   { id: 'appearance',   label: 'Appearance',     icon: '🎨', group: 'User'  },
   { id: 'privacy',      label: 'Privacy',        icon: '🔒', group: 'User'  },
   { id: 'usage',        label: 'Usage',          icon: '📊', group: 'User'  },
+  { id: 'mobile',       label: 'Mobile',         icon: '📱', group: 'Lumen' },
   { id: 'connectors',   label: 'Connectors',     icon: '🔗', group: 'Lumen' },
   { id: 'memory',       label: 'Memory',         icon: '🧠', group: 'Lumen' },
   { id: 'capabilities', label: 'Capabilities',   icon: '🛠️', group: 'Lumen' },
@@ -1090,9 +1891,10 @@ export function SettingsPage({ onClose }: SettingsPageProps) {
     profile:      <ProfileSection />,
     general:      <GeneralSection />,
     models:       <ModelsSection />,
-    appearance:   <AppearanceSection />,
+    appearance:   <ThemeEngine />,
     privacy:      <PrivacySection />,
     usage:        <UsageSection />,
+    mobile:       <MobileSection />,
     connectors:   <ConnectorsSection />,
     memory:       <MemorySection />,
     capabilities: <CapabilitiesSection />,
@@ -1152,7 +1954,7 @@ export function SettingsPage({ onClose }: SettingsPageProps) {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto bg-background">
-        <div className="max-w-2xl mx-auto px-10 py-10">
+        <div className="max-w-3xl mx-auto px-10 py-10">
           {content[section]}
         </div>
       </div>

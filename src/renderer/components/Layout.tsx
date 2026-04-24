@@ -7,11 +7,15 @@ import { ProjectsPane } from './ProjectsPane'
 import { SettingsPage } from './SettingsPage'
 import { useUIStore } from '../stores/uiStore'
 import { OPEN_PROJECTS_EVENT, OPEN_SETTINGS_EVENT } from '../hooks/useKeyboardShortcuts'
+import { useRemoteDispatch } from '../hooks/useRemoteDispatch'
 
 export function Layout() {
   const { mode, sidebarCollapsed } = useUIStore()
   const [showProjects, setShowProjects] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+
+  // Mount remote dispatch server — starts/stops based on settings
+  useRemoteDispatch()
 
   // Sidebar dispatches OPEN_PROJECTS_EVENT; we toggle the overlay.
   useEffect(() => {

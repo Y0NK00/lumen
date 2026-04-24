@@ -172,7 +172,7 @@ function NavItem({
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-[13px] font-medium
+      className="w-full flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-[13px] font-medium
                  text-text-secondary hover:text-text-primary hover:bg-surface-hover
                  transition-colors"
     >
@@ -580,7 +580,7 @@ export function Sidebar() {
         </div>
 
         {/* Nav items — fixed, not scrollable */}
-        <nav className="px-3 space-y-0.5 shrink-0">
+        <nav className="px-2 space-y-0.5 shrink-0">
           {HELM_NAV.map((item) => (
             <HelmNavItem
               key={item.id}
@@ -615,7 +615,7 @@ export function Sidebar() {
                 <p className="px-5 pt-4 pb-1.5 text-[11px] font-semibold text-text-muted uppercase tracking-widest">
                   Recents
                 </p>
-                <div className="px-3 space-y-0.5">
+                <div className="px-2 space-y-0.5">
                   {helmConvs.map((conv) => (
                     <button
                       key={conv.id}
@@ -669,7 +669,7 @@ export function Sidebar() {
       </div>
 
       {/* Persistent top-level nav */}
-      <div className="px-3 space-y-0.5">
+      <div className="px-2 space-y-0.5">
         {navItems.map((item) => (
           <NavItem
             key={item.id}
@@ -728,7 +728,7 @@ export function Sidebar() {
         {!search && activeProject && projectConvs.length > 0 && (
           <>
             <SectionHeader label={`${activeProject.emoji ?? '◫'} ${activeProject.name}`} />
-            <div className="px-3 space-y-0.5">
+            <div className="px-2 space-y-0.5">
               {projectConvs.map((conv) => (
                 <ConversationItem
                   key={conv.id}
@@ -755,7 +755,7 @@ export function Sidebar() {
                 </p>
               </div>
             ) : (
-              <div className="px-3 space-y-0.5">
+              <div className="px-2 space-y-0.5">
                 {pinnedList.map((conv) => (
                   <ConversationItem
                     key={conv.id}

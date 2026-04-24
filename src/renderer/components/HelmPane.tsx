@@ -271,9 +271,9 @@ function HelmChatContent() {
   const setPendingDispatch = useUIStore((s) => s.setPendingDispatch)
 
   const handleSend = (text: string) => {
-    const { defaultProvider, defaultClaudeModel, defaultOllamaModel } = useSettingsStore.getState()
+    const { defaultProvider, helmClaudeModel, defaultOllamaModel } = useSettingsStore.getState()
     const { activeProjectId } = useProjectsStore.getState()
-    const model = defaultProvider === 'claude' ? defaultClaudeModel : defaultOllamaModel
+    const model = defaultProvider === 'claude' ? helmClaudeModel : defaultOllamaModel
     // createConversation also sets activeConversationId in chatStore
     const convId = useChatStore.getState().createConversation(model, 'helm', activeProjectId ?? undefined)
     setHelmConvId(convId)
@@ -362,7 +362,7 @@ function HelmChatView() {
 
       {/* Messages — centered column matches InputBox's max-w-[840px] */}
       <div className="flex-1 min-h-0 flex flex-col">
-        <div className="flex-1 min-h-0 flex flex-col w-full max-w-[840px] mx-auto">
+        <div className="flex-1 min-h-0 flex flex-col w-full max-w-[840px] self-center">
           <MessageList messages={conv.messages} />
         </div>
       </div>
@@ -429,6 +429,7 @@ function NewTaskContent() {
   const [agent, setAgent] = useState('Claude (Auto)')
   const [priority, setPriority] = useState('Normal')
   const [lastDispatch, setLastDispatch] = useState<string | null>(null)
+  const [lastDispatchId, setLastDispatchId] = useState<AgentId | null>(null)
   const [dispatching, setDispatching] = useState(false)
 
   const agents = useHelmStore((s) => s.agents)
@@ -437,6 +438,20 @@ function NewTaskContent() {
   const addDispatch = useUIStore((s) => s.addDispatch)
   const setPendingDispatch = useUIStore((s) => s.setPendingDispatch)
   const setHelmConvId = useUIStore((s) => s.setHelmConvId)
+
+  // Resolve the selected agent dropdown value → a model string.
+  // 'Claude (Auto)' now maps to helmClaudeModel (Haiku by default) — higher TPM,
+  // lower cost, good enough for all four Helm agent archetypes.
+  const resolveModel = (agentDropdown: string): string => {
+    const { helmClaudeModel, defaultOllamaModel, claudeApiKey } = useSettingsStore.getState()
+    switch (agentDropdown) {
+      case 'Claude Opus':   return claudeApiKey ? 'claude-opus-4-6'           : helmClaudeModel
+      case 'Claude Sonnet': return claudeApiKey ? 'claude-sonnet-4-6'         : helmClaudeModel
+      case 'Claude Haiku':  return claudeApiKey ? 'claude-haiku-4-5-20251001' : helmClaudeModel
+      case 'Local (Ollama)':return defaultOllamaModel
+      default:              return helmClaudeModel  // 'Claude (Auto)' → Haiku
+    }
+  }
 
   const dispatch = async () => {
     if (!prompt.trim() || dispatching) return
@@ -450,12 +465,15 @@ function NewTaskContent() {
       if (resolved) {
         incrementAgentRouteCount(resolved)
         setLastDispatch(AGENT_META[resolved].name)
+        setLastDispatchId(resolved)
 
-        // Create a conversation for this task — stays in Helm mode, shown inline
-        const { defaultProvider, defaultClaudeModel, defaultOllamaModel } = useSettingsStore.getState()
+        // Resolve model from dropdown + inject the agent's specialized system prompt
+        const model = resolveModel(agent)
         const { activeProjectId } = useProjectsStore.getState()
-        const model = defaultProvider === 'claude' ? defaultClaudeModel : defaultOllamaModel
-        const convId = useChatStore.getState().createConversation(model, 'helm', activeProjectId ?? undefined)
+        const agentSystemPrompt = AGENT_META[resolved].systemPrompt
+        const convId = useChatStore.getState().createConversation(
+          model, 'helm', activeProjectId ?? undefined, agentSystemPrompt
+        )
 
         // Log to Progress widget + dispatch history
         addDispatch({
@@ -509,7 +527,7 @@ function NewTaskContent() {
           <CustomSelect
             value={agent}
             onChange={setAgent}
-            options={['Claude (Auto)', 'Claude Opus', 'Claude Sonnet', 'Local (Ollama)']}
+            options={['Claude (Auto)', 'Claude Haiku', 'Claude Sonnet', 'Claude Opus', 'Local (Ollama)']}
           />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -541,12 +559,19 @@ function NewTaskContent() {
             Clear
           </button>
         )}
-        {lastDispatch && (
+        {lastDispatch && lastDispatchId && (
           <button
             onClick={() => setHelmNav('dispatch')}
-            className="ml-auto text-xs text-text-muted hover:text-accent transition-colors"
+            className="ml-auto flex items-center gap-1.5 text-xs text-text-muted
+                       hover:text-accent transition-colors group"
+            title="View Dispatch agents"
           >
-            Routed to <span className="text-text-primary">{lastDispatch}</span> →
+            <span className="text-base leading-none">{AGENT_META[lastDispatchId].icon}</span>
+            <span>Routed to</span>
+            <span className="text-text-primary group-hover:text-accent transition-colors">
+              {lastDispatch}
+            </span>
+            <span>→</span>
           </button>
         )}
       </div>
@@ -555,17 +580,175 @@ function NewTaskContent() {
 }
 
 function ProjectsContent() {
+  const { projects, activeProjectId, createProject, updateProject, deleteProject, setActiveProject } =
+    useProjectsStore()
+  const projectList = Object.values(projects).sort((a, b) => b.createdAt - a.createdAt)
+
+  const [showForm, setShowForm] = useState(false)
+  const [editId,   setEditId]   = useState<string | null>(null)
+  const [form,     setForm]     = useState({ name: '', rootPath: '', systemPrompt: '', emoji: '' })
+  const tower = (window as any).tower
+
+  const openCreate = () => {
+    setEditId(null)
+    setForm({ name: '', rootPath: '', systemPrompt: '', emoji: '' })
+    setShowForm(true)
+  }
+
+  const openEdit = (p: typeof projectList[0]) => {
+    setEditId(p.id)
+    setForm({ name: p.name, rootPath: p.rootPath, systemPrompt: p.systemPrompt, emoji: p.emoji ?? '' })
+    setShowForm(true)
+  }
+
+  const handlePickFolder = async () => {
+    const result = await tower?.openFolderDialog?.()
+    if (result) setForm((f) => ({ ...f, rootPath: result }))
+  }
+
+  const handleSave = () => {
+    if (!form.name.trim()) return
+    if (editId) {
+      updateProject(editId, {
+        name: form.name.trim(),
+        rootPath: form.rootPath.trim(),
+        systemPrompt: form.systemPrompt.trim(),
+        emoji: form.emoji.trim() || undefined,
+      })
+    } else {
+      const id = createProject({
+        name: form.name.trim(),
+        rootPath: form.rootPath.trim(),
+        systemPrompt: form.systemPrompt.trim(),
+        emoji: form.emoji.trim() || undefined,
+      })
+      setActiveProject(id)
+      // Sync working path to main process so file tools are scoped correctly
+      tower?.syncRootPath?.(form.rootPath.trim() || null)
+    }
+    setShowForm(false)
+  }
+
+  const handleActivate = (id: string) => {
+    setActiveProject(id)
+    const p = projects[id]
+    tower?.syncRootPath?.(p?.rootPath || null)
+  }
+
+  const inputCls = 'bg-[#0d0d1c] border border-white/10 rounded-lg px-3 py-2 text-[12.5px] text-white/80 placeholder:text-white/25 focus:outline-none focus:border-accent/50 transition-colors'
+
   return (
     <div className="flex flex-col gap-4 w-full max-w-xl">
-      <div>
-        <h2 className="text-base font-semibold text-text-primary mb-0.5">Projects</h2>
-        <p className="text-xs text-text-muted">Group related tasks and conversations into projects.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-text-primary mb-0.5">Projects</h2>
+          <p className="text-xs text-text-muted">Group tasks and conversations with a working folder and custom instructions.</p>
+        </div>
+        <button
+          onClick={openCreate}
+          className="text-xs px-3 py-1.5 rounded-lg bg-accent/10 border border-accent/30 text-accent hover:bg-accent/20 transition-colors shrink-0"
+        >
+          + New Project
+        </button>
       </div>
-      <div className="flex flex-col items-center justify-center h-48 gap-3 border border-dashed border-border rounded-xl">
-        <span className="text-3xl opacity-30">◫</span>
-        <p className="text-sm text-text-muted">No projects yet</p>
-        <button className="text-xs text-accent hover:underline">Create your first project →</button>
-      </div>
+
+      {/* Create / Edit form */}
+      {showForm && (
+        <div className="flex flex-col gap-3 p-4 bg-surface border border-border rounded-xl">
+          <p className="text-[12px] font-semibold text-text-secondary">{editId ? 'Edit Project' : 'New Project'}</p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={form.emoji}
+              onChange={(e) => setForm((f) => ({ ...f, emoji: e.target.value.slice(0, 2) }))}
+              placeholder="🗂"
+              className={`${inputCls} w-14 text-center`}
+            />
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="Project name"
+              className={`${inputCls} flex-1`}
+              autoFocus
+            />
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={form.rootPath}
+              onChange={(e) => setForm((f) => ({ ...f, rootPath: e.target.value }))}
+              placeholder="Working folder (optional) — e.g. C:\Dev\my-project"
+              className={`${inputCls} flex-1 font-mono text-[11.5px]`}
+            />
+            <button onClick={handlePickFolder} className="px-2.5 py-1 text-[11px] border border-border rounded-lg text-text-muted hover:text-text-primary transition-colors shrink-0">Browse…</button>
+          </div>
+          <textarea
+            value={form.systemPrompt}
+            onChange={(e) => setForm((f) => ({ ...f, systemPrompt: e.target.value }))}
+            placeholder="System prompt — extra context injected into every conversation in this project (optional)"
+            rows={3}
+            className={`${inputCls} resize-none leading-relaxed`}
+          />
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setShowForm(false)} className="text-[12px] px-3 py-1.5 rounded-lg text-text-muted hover:text-text-primary border border-border transition-colors">Cancel</button>
+            <button onClick={handleSave} disabled={!form.name.trim()} className="text-[12px] px-3 py-1.5 rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-40 transition-colors">{editId ? 'Save' : 'Create'}</button>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {projectList.length === 0 && !showForm && (
+        <div className="flex flex-col items-center justify-center h-40 gap-3 border border-dashed border-border rounded-xl">
+          <span className="text-3xl opacity-30">◫</span>
+          <p className="text-sm text-text-muted">No projects yet</p>
+          <button onClick={openCreate} className="text-xs text-accent hover:underline">Create your first project →</button>
+        </div>
+      )}
+
+      {/* Project list */}
+      {projectList.map((p) => (
+        <div
+          key={p.id}
+          className={`flex items-start gap-3 p-3.5 rounded-xl border transition-colors cursor-pointer
+            ${activeProjectId === p.id ? 'border-accent/40 bg-accent/5' : 'border-border hover:border-border/80 hover:bg-surface'}`}
+          onClick={() => handleActivate(p.id)}
+        >
+          <span className="text-xl mt-0.5 shrink-0">{p.emoji || '🗂'}</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="text-[13px] font-medium text-text-primary truncate">{p.name}</p>
+              {activeProjectId === p.id && (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-accent/20 text-accent shrink-0">ACTIVE</span>
+              )}
+            </div>
+            {p.rootPath && (
+              <p className="text-[11px] font-mono text-text-muted truncate mt-0.5">{p.rootPath}</p>
+            )}
+            {p.systemPrompt && (
+              <p className="text-[11.5px] text-text-muted mt-1 leading-snug line-clamp-2">{p.systemPrompt}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); openEdit(p) }}
+              className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-text-primary hover:bg-white/8 transition-colors text-[10px]"
+              title="Edit"
+            >✎</button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                if (confirm(`Delete project "${p.name}"?`)) {
+                  deleteProject(p.id)
+                  if (activeProjectId === p.id) tower?.syncRootPath?.(null)
+                }
+              }}
+              className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-error hover:bg-error/10 transition-colors text-[10px]"
+              title="Delete"
+            >✕</button>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -594,16 +777,19 @@ function toLocalDateTimeValue(ms?: number): string {
 }
 
 function ScheduledContent() {
-  const scheduledTasks = useHelmStore((s) => s.scheduledTasks)
+  const scheduledTasks    = useHelmStore((s) => s.scheduledTasks)
+  const taskResults       = useHelmStore((s) => s.taskResults)
   const createScheduledTask = useHelmStore((s) => s.createScheduledTask)
   const deleteScheduledTask = useHelmStore((s) => s.deleteScheduledTask)
   const toggleScheduledTask = useHelmStore((s) => s.toggleScheduledTask)
+  const clearTaskResults  = useHelmStore((s) => s.clearTaskResults)
 
   const [showForm, setShowForm] = useState(false)
   const [label, setLabel] = useState('')
   const [prompt, setPrompt] = useState('')
   const [cadence, setCadence] = useState<Cadence>('daily')
   const [scheduledForStr, setScheduledForStr] = useState('')
+  const [expandedResultId, setExpandedResultId] = useState<string | null>(null)
 
   // Sort: enabled first (so disabled ones drop to bottom), then newest first.
   const sorted = useMemo(() => {
@@ -735,60 +921,137 @@ function ScheduledContent() {
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          {sorted.map((t) => (
-            <div
-              key={t.id}
-              className={`flex items-center gap-3 px-3 py-2.5 bg-surface border border-border rounded-xl
-                          transition-opacity ${t.enabled ? '' : 'opacity-50'}`}
-            >
-              <button
-                onClick={() => toggleScheduledTask(t.id)}
-                className={`w-8 h-4 rounded-full transition-colors shrink-0 relative
-                            ${t.enabled ? 'bg-accent' : 'bg-surface-active'}`}
-                title={t.enabled ? 'Pause' : 'Resume'}
+          {sorted.map((t) => {
+            const results = taskResults[t.id] ?? []
+            const latest  = results[0] ?? null
+            const isExpanded = expandedResultId === t.id
+
+            return (
+              <div
+                key={t.id}
+                className={`flex flex-col bg-surface border border-border rounded-xl overflow-hidden
+                            transition-opacity ${t.enabled ? '' : 'opacity-50'}`}
               >
-                <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform
-                                  ${t.enabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-              </button>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-text-primary truncate">{t.label}</p>
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-surface-active text-text-muted shrink-0">
-                    {CADENCE_LABELS[t.cadence]}
-                  </span>
+                {/* ── Main row ── */}
+                <div className="flex items-center gap-3 px-3 py-2.5">
+                  <button
+                    onClick={() => toggleScheduledTask(t.id)}
+                    className={`w-8 h-4 rounded-full transition-colors shrink-0 relative
+                                ${t.enabled ? 'bg-accent' : 'bg-surface-active'}`}
+                    title={t.enabled ? 'Pause' : 'Resume'}
+                  >
+                    <span className={`absolute top-[2px] left-[2px] w-3 h-3 rounded-full bg-white transition-transform shadow-sm
+                                      ${t.enabled ? 'translate-x-[16px]' : 'translate-x-0'}`} />
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-text-primary truncate">{t.label}</p>
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-surface-active text-text-muted shrink-0">
+                        {CADENCE_LABELS[t.cadence]}
+                      </span>
+                      {t.lastStatus === 'error' && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-error/10 text-error shrink-0">error</span>
+                      )}
+                      {t.lastStatus === 'ok' && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400 shrink-0">ok</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-text-muted truncate">{t.prompt}</p>
+                    <p className="text-[10px] text-text-muted mt-0.5">
+                      {t.lastRunAt
+                        ? `Last run: ${timeAgo(t.lastRunAt)}`
+                        : t.cadence === 'once' && t.scheduledFor
+                          ? `Scheduled: ${new Date(t.scheduledFor).toLocaleString()}`
+                          : 'Never run'}
+                    </p>
+                  </div>
+
+                  {/* View results — only shown if there are results */}
+                  {results.length > 0 && (
+                    <button
+                      onClick={() => setExpandedResultId(isExpanded ? null : t.id)}
+                      className={`w-6 h-6 flex items-center justify-center rounded transition-all shrink-0
+                                  ${isExpanded ? 'text-accent bg-accent/10' : 'text-text-muted hover:text-accent hover:bg-accent/10'}`}
+                      title={isExpanded ? 'Hide results' : `${results.length} result${results.length !== 1 ? 's' : ''}`}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                           style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+                        <polyline points="2,3.5 5,6.5 8,3.5" />
+                      </svg>
+                    </button>
+                  )}
+
+                  {/* Run now */}
+                  <button
+                    onClick={() => window.tower.cronRunNow(t)}
+                    className="w-6 h-6 flex items-center justify-center rounded text-text-muted
+                               hover:text-accent hover:bg-accent/10 transition-all shrink-0"
+                    title="Run now"
+                  >
+                    <svg width="9" height="10" viewBox="0 0 9 10" fill="currentColor">
+                      <path d="M1 1.5v7l7-3.5L1 1.5z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => deleteScheduledTask(t.id)}
+                    className="w-6 h-6 flex items-center justify-center rounded text-text-muted
+                               hover:text-error hover:bg-error/10 transition-all shrink-0"
+                    title="Delete"
+                  >
+                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                      <line x1="1" y1="1" x2="7" y2="7" /><line x1="7" y1="1" x2="1" y2="7" />
+                    </svg>
+                  </button>
                 </div>
-                <p className="text-xs text-text-muted truncate">{t.prompt}</p>
-                <p className="text-[10px] text-text-muted mt-0.5">
-                  {t.lastRunAt
-                    ? `Last run: ${timeAgo(t.lastRunAt)}`
-                    : t.cadence === 'once' && t.scheduledFor
-                      ? `Scheduled: ${new Date(t.scheduledFor).toLocaleString()}`
-                      : 'Never run'}
-                </p>
+
+                {/* ── Results panel (expanded) ── */}
+                {isExpanded && latest && (
+                  <div className="border-t border-border bg-background px-4 py-3 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">
+                        Last result · {new Date(latest.ranAt).toLocaleString()}
+                      </p>
+                      {results.length > 1 && (
+                        <span className="text-[10px] text-text-muted">{results.length} total</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-text-secondary whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed">
+                      {latest.error
+                        ? <span className="text-error">{latest.error}</span>
+                        : latest.result}
+                    </div>
+                    {results.length > 1 && (
+                      <details className="group">
+                        <summary className="text-[10px] text-text-muted hover:text-text-primary cursor-pointer select-none list-none flex items-center gap-1">
+                          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                               className="group-open:rotate-90 transition-transform">
+                            <polyline points="2,1 6,4 2,7" />
+                          </svg>
+                          Previous runs ({results.length - 1})
+                        </summary>
+                        <div className="mt-2 flex flex-col gap-3 pl-2 border-l border-border">
+                          {results.slice(1).map((r, i) => (
+                            <div key={i} className="flex flex-col gap-1">
+                              <p className="text-[10px] text-text-muted">{new Date(r.ranAt).toLocaleString()}</p>
+                              <p className="text-xs text-text-secondary whitespace-pre-wrap max-h-32 overflow-y-auto leading-relaxed">
+                                {r.error ? <span className="text-error">{r.error}</span> : r.result}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                    <button
+                      onClick={() => { clearTaskResults(t.id); setExpandedResultId(null) }}
+                      className="text-[10px] text-text-muted hover:text-error transition-colors self-start"
+                    >
+                      Clear history
+                    </button>
+                  </div>
+                )}
               </div>
-              {/* Run now — fires the task immediately via cron bridge */}
-              <button
-                onClick={() => window.tower.cronRunNow(t)}
-                className="w-6 h-6 flex items-center justify-center rounded text-text-muted
-                           hover:text-accent hover:bg-accent/10 transition-all shrink-0"
-                title="Run now"
-              >
-                <svg width="9" height="10" viewBox="0 0 9 10" fill="currentColor">
-                  <path d="M1 1.5v7l7-3.5L1 1.5z" />
-                </svg>
-              </button>
-              <button
-                onClick={() => deleteScheduledTask(t.id)}
-                className="w-6 h-6 flex items-center justify-center rounded text-text-muted
-                           hover:text-error hover:bg-error/10 transition-all shrink-0"
-                title="Delete"
-              >
-                <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <line x1="1" y1="1" x2="7" y2="7" /><line x1="7" y1="1" x2="1" y2="7" />
-                </svg>
-              </button>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -870,8 +1133,8 @@ function DispatchContent() {
                             ${state.enabled ? 'bg-accent' : 'bg-surface-active'}`}
                 title={state.enabled ? 'Disable' : 'Enable'}
               >
-                <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform
-                                  ${state.enabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                <span className={`absolute top-[2px] left-[2px] w-3 h-3 rounded-full bg-white transition-transform shadow-sm
+                                  ${state.enabled ? 'translate-x-[16px]' : 'translate-x-0'}`} />
               </button>
             </div>
           )
