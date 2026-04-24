@@ -26,11 +26,15 @@ function CopyButton({ text }: { text: string }) {
 }
 
 export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps) {
+  // Skip syntax highlighting while streaming — rehype-highlight chokes on
+  // partial code blocks and can crash the render tree on mobile Safari.
+  const rehypePlugins = isStreaming ? [] : [rehypeHighlight]
+
   return (
-    <div className={`prose-lumen text-[14px] leading-[1.7] text-text-primary ${isStreaming ? 'streaming-cursor' : ''}`}>
+    <div className={`prose-lumen text-[14px] leading-[1.7] text-text-primary overflow-hidden ${isStreaming ? 'streaming-cursor' : ''}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight]}
+        rehypePlugins={rehypePlugins}
         components={{
           code({ className, children, ...props }) {
             const isBlock = className?.startsWith('language-')
@@ -40,7 +44,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
             if (!isBlock) {
               return (
                 <code
-                  className="px-[5px] py-[2px] rounded-md text-[13px] font-mono bg-code-inline text-text-primary"
+                  className="px-[5px] py-[2px] rounded-md text-[13px] font-mono bg-code-inline text-text-primary break-words"
                   {...props}
                 >
                   {children}
@@ -49,21 +53,21 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
             }
 
             return (
-              <div className="rounded-xl overflow-hidden border border-border my-3 text-[13px]">
+              <div className="rounded-xl overflow-hidden border border-border my-3 text-[13px] max-w-full">
                 <div className="flex items-center justify-between px-4 py-1.5 bg-code-header border-b border-border">
                   <span className="text-[11px] text-text-muted font-mono">{lang || 'code'}</span>
                   <CopyButton text={codeText} />
                 </div>
                 <div className="bg-code-bg overflow-x-auto">
-                  <pre className="p-4 m-0">
-                    <code className={`${className} font-mono`} {...props}>{children}</code>
+                  <pre className="p-4 m-0 min-w-0">
+                    <code className={`${className ?? ''} font-mono`} {...props}>{children}</code>
                   </pre>
                 </div>
               </div>
             )
           },
           p({ children }) {
-            return <p className="mb-3 last:mb-0 text-text-primary">{children}</p>
+            return <p className="mb-3 last:mb-0 text-text-primary break-words">{children}</p>
           },
           ul({ children }) {
             return <ul className="list-disc pl-5 mb-3 space-y-1 text-text-primary">{children}</ul>
@@ -72,7 +76,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
             return <ol className="list-decimal pl-5 mb-3 space-y-1 text-text-primary">{children}</ol>
           },
           li({ children }) {
-            return <li className="text-text-primary">{children}</li>
+            return <li className="text-text-primary break-words">{children}</li>
           },
           h1({ children }) {
             return <h1 className="text-[18px] font-semibold text-text-primary mt-4 mb-2">{children}</h1>
@@ -93,7 +97,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
           a({ href, children }) {
             return (
               <a href={href} target="_blank" rel="noopener noreferrer"
-                className="text-accent hover:underline underline-offset-2">
+                className="text-accent hover:underline underline-offset-2 break-all">
                 {children}
               </a>
             )
