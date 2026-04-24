@@ -1,0 +1,62 @@
+# Lumen Server — Unraid deploy
+#
+# Deploy from /mnt/user/appdata/lumen/ on your Unraid box:
+#   git clone <repo> /mnt/user/appdata/lumen
+#   cd /mnt/user/appdata/lumen/lumen-server
+#   cp .env.example .env
+#   vim .env                    # fill in required values
+#   docker compose up -d        # starts and detaches
+#   docker compose logs -f      # tail logs
+#
+# Build context is the repo root (../) so the PWA source can be bundled
+# into the same image via the multi-stage Dockerfile.
+#
+# Backup strategy:
+#   - SQLite is in /mnt/user/appdata/lumen/data/lumen.db
+#   - Attachments in /mnt/user/appdata/lumen/data/attachments/
+#   - Include /mnt/user/appdata/lumen/ in Unraid's appdata backup schedule
+#   - For point-in-time: `docker exec lumen-server sqlite3 /data/lumen.db ".backup /data/backups/$(date +%F).db"`
+
+services:
+  lumen-server:
+    build:
+      context: ..
+      dockerfile: lumen-server/docker/Dockerfile
+    image: lumen-server:latest
+    container_name: lumen-server
+    restart: unless-stopped
+    ports:
+      - "7747:7747"   # HTTP API + Mobile PWA
+      - "7745:7745"   # Browser extension WebSocket
+    volumes:
+      - ./data:/data
+      # Mount host vault dirs if users keep their vaults on the Unraid array:
+      # - /mnt/user/lumen-vaults:/data/vaults:ro
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DATA_DIR=/data
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7747/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ── OPTIONAL: Cloudflare Tunnel ──
+  # Uncomment and set CLOUDFLARE_TUNNEL_TOKEN in .env to expose publicly.
+  # Alternative: run cloudflared directly on Unraid via CA plugin.
+  #
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: lumen-tunnel
+  #   restart: unless-stopped
+  #   command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+  #   depends_on:
+  #     - lumen-server
