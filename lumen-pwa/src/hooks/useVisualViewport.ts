@@ -1,10 +1,9 @@
 import { useEffect } from 'react'
 
 /**
- * On iOS Safari, the software keyboard overlays the viewport but doesn't
- * resize the layout viewport. This hook listens to the VisualViewport API
- * and sets a CSS variable --viewport-height that components can use
- * instead of 100vh/100dvh. When the keyboard is up, this shrinks correctly.
+ * Tracks the VisualViewport API so the layout shrinks correctly when
+ * the iOS software keyboard opens. After each resize, scrolls the
+ * message list to the bottom so content doesn't disappear behind the keyboard.
  */
 export function useVisualViewport() {
   useEffect(() => {
@@ -13,6 +12,13 @@ export function useVisualViewport() {
     const update = () => {
       const h = vv ? vv.height : window.innerHeight
       document.documentElement.style.setProperty('--viewport-height', `${h}px`)
+
+      // After the layout reflows with the new height, scroll the message list
+      // to the bottom so the last message is always visible above the keyboard.
+      requestAnimationFrame(() => {
+        const msgList = document.querySelector('[data-message-list]')
+        if (msgList) msgList.scrollTop = msgList.scrollHeight
+      })
     }
 
     update()

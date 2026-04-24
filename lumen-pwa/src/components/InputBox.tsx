@@ -120,6 +120,7 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false }: Inpu
               'Message Lumen…'
             }
             disabled={disabled || isListening}
+            onFocus={() => { const m = document.querySelector("[data-message-list]"); if (m) m.scrollTop = m.scrollHeight }}
             onInput={resize}
             onKeyDown={handleKeyDown}
             className="flex-1 resize-none bg-transparent border-0 text-[14px] text-text-primary

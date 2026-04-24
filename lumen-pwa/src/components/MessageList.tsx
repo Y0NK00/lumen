@@ -42,7 +42,7 @@ export function MessageList({ messages }: MessageListProps) {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-5">
+    <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-5" data-message-list>
       {messages.map((msg) => {
         const text = messageText(msg)
         const isUser = msg.role === 'user'
