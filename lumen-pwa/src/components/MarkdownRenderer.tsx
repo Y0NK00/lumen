@@ -31,13 +31,19 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
   const rehypePlugins = isStreaming ? [] : [rehypeHighlight]
 
   return (
-    <div className={`prose-lumen text-[14px] leading-[1.7] text-text-primary overflow-hidden ${isStreaming ? 'streaming-cursor' : ''}`}>
+    <div
+      className={`prose-reset text-[14.5px] leading-[1.7] text-text-primary overflow-hidden ${isStreaming ? 'streaming-cursor' : ''}`}
+      // Explicitly set prose font — prevents inheriting monospace from <pre>/<code> ancestors
+      // or from Tailwind/browser preflight resets
+      style={{ fontFamily: 'var(--font-sans)', wordBreak: 'break-word' }}
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={rehypePlugins}
         components={{
           code({ className, children, ...props }) {
-            const isBlock = className?.startsWith('language-')
+            // Treat as block if it has a language class OR contains newlines (unfenced blocks)
+            const isBlock = className?.startsWith('language-') || String(children).includes('\n')
             const lang = className?.replace('language-', '') ?? ''
             const codeText = String(children).replace(/\n$/, '')
 

@@ -100,3 +100,19 @@ textarea, input {
   font-size: 16px !important;
   font-family: var(--font-sans);
 }
+
+/* Ensure pre/code never bleeds monospace into surrounding prose */
+pre {
+  font-family: var(--font-mono);
+  overflow-x: auto;
+}
+
+/* Explicit prose reset — ReactMarkdown output should always use sans-serif */
+.prose-reset, .prose-reset * {
+  font-family: var(--font-sans);
+}
+.prose-reset code,
+.prose-reset pre,
+.prose-reset pre code {
+  font-family: var(--font-mono);
+}
