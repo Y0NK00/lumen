@@ -61,8 +61,10 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false }: Inpu
     recognition.interimResults = true
     recognition.lang = 'en-US'
 
-    recognition.onresult = (e: { results: { [key: number]: { [key: number]: { transcript: string } } } }) => {
-      const transcript = Array.from({ length: e.results.length }, (_, i) => e.results[i][0].transcript).join('')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (e: any) => {
+      let transcript = ''
+      for (let i = 0; i < e.results.length; i++) { transcript += e.results[i][0].transcript }
       const el = textareaRef.current
       if (el) {
         el.value = transcript
