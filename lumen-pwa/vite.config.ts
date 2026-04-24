@@ -8,8 +8,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['icons/*.png'],
+      // Don't register a service worker — keeps the manifest (installable PWA)
+      // but removes the SW reload behavior that was interrupting sessions.
+      injectRegister: null,
+      strategies: 'generateSW',
       manifest: {
         name: 'Lumen',
         short_name: 'Lumen',
@@ -23,16 +25,6 @@ export default defineConfig({
           { src: 'icons/512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
         ]
       },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com/,
-            handler: 'CacheFirst',
-            options: { cacheName: 'google-fonts', expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 } }
-          }
-        ]
-      }
     }),
   ],
   server: {

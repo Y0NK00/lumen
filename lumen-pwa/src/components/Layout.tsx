@@ -10,7 +10,12 @@ export function Layout() {
   const activeConv = conversations.find((c) => c.id === activeId)
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-background">
+    // Use --viewport-height set by useVisualViewport so layout shrinks
+    // correctly when the iOS software keyboard is open.
+    <div
+      className="flex w-full overflow-hidden bg-background"
+      style={{ height: 'var(--viewport-height, 100dvh)' }}
+    >
 
       {/* Desktop sidebar */}
       <div className="hidden md:flex shrink-0">
@@ -27,7 +32,7 @@ export function Layout() {
         </div>
       )}
 
-      {/* Main */}
+      {/* Main area */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
         {/* Mobile top bar */}
