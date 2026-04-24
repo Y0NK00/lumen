@@ -15,7 +15,7 @@ function messageText(msg: DisplayMessage): string {
 function LumenAvatar() {
   return (
     <div className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
-      style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.22)' }}>
+      style={{ background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--color-accent) 22%, transparent)' }}>
       <svg width="11" height="11" viewBox="0 0 20 20" fill="none">
         <path d="M10 2L17 6V14L10 18L3 14V6L10 2Z" stroke="#8b5cf6" strokeWidth="1.8" strokeLinejoin="round"/>
         <circle cx="10" cy="10" r="2.5" fill="#8b5cf6"/>
@@ -33,7 +33,7 @@ function StreamingIndicator() {
           key={i}
           className="w-1.5 h-1.5 rounded-full"
           style={{
-            background: 'rgba(139,92,246,0.6)',
+            background: 'color-mix(in srgb, var(--color-accent) 60%, transparent)',
             animation: `blink 1.2s ease-in-out ${i * 0.2}s infinite`,
           }}
         />
@@ -72,9 +72,9 @@ export function MessageList({ messages }: MessageListProps) {
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
             style={{
-              background: 'rgba(139,92,246,0.1)',
-              border: '1px solid rgba(139,92,246,0.2)',
-              boxShadow: '0 0 24px rgba(139,92,246,0.15)',
+              background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--color-accent) 20%, transparent)',
+              boxShadow: '0 0 24px color-mix(in srgb, var(--color-accent) 15%, transparent)',
             }}>
             <svg width="22" height="22" viewBox="0 0 20 20" fill="none">
               <path d="M10 2L17 6V14L10 18L3 14V6L10 2Z" stroke="#8b5cf6" strokeWidth="1.5" strokeLinejoin="round"/>
@@ -142,8 +142,8 @@ export function MessageList({ messages }: MessageListProps) {
               <div
                 className="max-w-[80%] rounded-2xl rounded-tr-[4px] px-4 py-2.5"
                 style={{
-                  background: 'linear-gradient(135deg, #9f7aea 0%, #7c3aed 60%, #6d28d9 100%)',
-                  boxShadow: '0 2px 12px 2px rgba(139,92,246,0.25)',
+                  background: 'linear-gradient(135deg, var(--color-accent-light) 0%, var(--color-accent-hover) 60%, var(--color-accent-dark) 100%)',
+                  boxShadow: '0 2px 12px 2px color-mix(in srgb, var(--color-accent) 25%, transparent)',
                 }}
               >
                 <p className="text-[14.5px] text-white leading-[1.65] whitespace-pre-wrap break-words">

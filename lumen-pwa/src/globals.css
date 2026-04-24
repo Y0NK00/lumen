@@ -15,6 +15,9 @@
   --color-text-muted:       #404058;
   --color-accent:           #8b5cf6;
   --color-accent-hover:     #7c3aed;
+  /* Gradient stops — overridden by useTheme hook when a theme is applied */
+  --color-accent-light:     #9f7aea;
+  --color-accent-dark:      #6d28d9;
   --color-error:            #f87171;
   --color-code-bg:          #08080f;
   --color-code-header:      #0d0d1a;

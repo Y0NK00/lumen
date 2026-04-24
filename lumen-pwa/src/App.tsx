@@ -5,6 +5,7 @@ import { apiJSON, listConversations } from './lib/api'
 import { LoginPage } from './components/LoginPage'
 import { Layout } from './components/Layout'
 import { useVisualViewport } from './hooks/useVisualViewport'
+import { useTheme } from './hooks/useTheme'
 
 async function tryHydrateUser() {
   const token = localStorage.getItem('lumen_token')
@@ -24,6 +25,8 @@ export default function App() {
 
   // Track visual viewport so iOS keyboard shrinks layout correctly
   useVisualViewport()
+  // Apply persisted accent theme to CSS variables
+  useTheme()
 
   // On mount: verify token is still valid
   useEffect(() => {

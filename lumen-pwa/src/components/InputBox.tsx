@@ -165,8 +165,8 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false }: Inpu
               title="Send"
               className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl mb-0.5 transition-all duration-150 active:scale-95"
             style={canSend ? {
-              background: 'linear-gradient(135deg, #9f7aea 0%, #7c3aed 100%)',
-              boxShadow: '0 2px 8px 2px rgba(139,92,246,0.35)',
+              background: 'linear-gradient(135deg, var(--color-accent-light) 0%, var(--color-accent-dark) 100%)',
+              boxShadow: '0 2px 8px 2px color-mix(in srgb, var(--color-accent) 35%, transparent)',
               color: 'white',
             } : {
               background: 'var(--color-surface-active)',

@@ -46,13 +46,13 @@ export function Layout() {
             background: 'rgba(8,8,16,0.85)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
-            borderBottom: '1px solid rgba(139,92,246,0.14)',
+            borderBottom: '1px solid color-mix(in srgb, var(--color-accent) 14%, transparent)',
           }}
         >
           {/* Accent gradient line at very bottom */}
           <div
             className="absolute bottom-0 left-0 right-0 h-px pointer-events-none"
-            style={{ background: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.3) 40%, rgba(139,92,246,0.3) 60%, transparent)' }}
+            style={{ background: 'linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-accent) 30%, transparent) 40%, color-mix(in srgb, var(--color-accent) 30%, transparent) 60%, transparent)' }}
           />
 
           {/* Hamburger */}
