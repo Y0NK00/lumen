@@ -4,6 +4,7 @@ import { useAppStore } from './stores/appStore'
 import { apiJSON, listConversations } from './lib/api'
 import { LoginPage } from './components/LoginPage'
 import { Layout } from './components/Layout'
+import { useVisualViewport } from './hooks/useVisualViewport'
 
 async function tryHydrateUser() {
   const token = localStorage.getItem('lumen_token')
@@ -20,6 +21,9 @@ async function tryHydrateUser() {
 export default function App() {
   const { token, user, clearAuth } = useAuthStore()
   const { setConversations, conversationsLoaded } = useAppStore()
+
+  // Track visual viewport so iOS keyboard shrinks layout correctly
+  useVisualViewport()
 
   // On mount: verify token is still valid
   useEffect(() => {

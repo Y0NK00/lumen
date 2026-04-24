@@ -22,7 +22,7 @@ export function useStream() {
       convId = conv.id
     }
 
-    // Optimistically add the user message to the display list
+    // Optimistically add the user message
     const optimisticUserMsg = {
       id: crypto.randomUUID(),
       conversationId: convId,
@@ -40,6 +40,25 @@ export function useStream() {
 
     let assistantMsgId: string | null = null
 
+    // Delta batching — accumulate text_delta events and flush at ~30fps
+    // to prevent too many Zustand updates from hanging mobile Safari.
+    let deltaBuffer = ''
+    let flushTimer: ReturnType<typeof setTimeout> | null = null
+
+    const flushDelta = (msgId: string, cId: string) => {
+      if (deltaBuffer) {
+        store().updateStreamingMessage(cId, msgId, deltaBuffer)
+        deltaBuffer = ''
+      }
+      flushTimer = null
+    }
+
+    const scheduledFlush = (msgId: string, cId: string) => {
+      if (!flushTimer) {
+        flushTimer = setTimeout(() => flushDelta(msgId, cId), 33) // ~30fps
+      }
+    }
+
     try {
       const activeConv = store().conversations.find((c) => c.id === convId)
       const model = activeConv?.model
@@ -56,24 +75,35 @@ export function useStream() {
             isStreaming: true,
           })
         } else if (event === 'text_delta' && assistantMsgId) {
-          store().updateStreamingMessage(convId, assistantMsgId, d.delta as string)
+          deltaBuffer += d.delta as string
+          scheduledFlush(assistantMsgId, convId)
         } else if (event === 'done' && assistantMsgId) {
+          // Flush any remaining buffered text immediately
+          if (flushTimer) { clearTimeout(flushTimer); flushTimer = null }
+          flushDelta(assistantMsgId, convId)
           store().finalizeStreamingMessage(convId, assistantMsgId)
-          // Refresh conversation summary to get updated title/timestamp
+          // Refresh with server-persisted data
           getConversation(convId).then(({ conversation, messages }) => {
             store().upsertConversation(conversation)
-            // Replace display messages with server-persisted ones
             store().setMessages(convId!, messages)
           }).catch(() => {})
         } else if (event === 'error') {
-          if (assistantMsgId) store().finalizeStreamingMessage(convId, assistantMsgId)
+          if (flushTimer) { clearTimeout(flushTimer); flushTimer = null }
+          if (assistantMsgId) {
+            flushDelta(assistantMsgId, convId)
+            store().finalizeStreamingMessage(convId, assistantMsgId)
+          }
           console.error('[stream] error event:', d)
         }
       }
     } catch (err) {
+      if (flushTimer) { clearTimeout(flushTimer); flushTimer = null }
       if (err instanceof Error && err.name === 'AbortError') return
       console.error('[stream] fetch error:', err)
-      if (assistantMsgId) store().finalizeStreamingMessage(convId, assistantMsgId)
+      if (assistantMsgId) {
+        flushDelta(assistantMsgId, convId)
+        store().finalizeStreamingMessage(convId, assistantMsgId)
+      }
     } finally {
       setIsStreaming(false)
       store().setStreamingConvId(null)
