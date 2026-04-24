@@ -39,8 +39,22 @@ export function Layout() {
       {/* Main area */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
-        {/* Mobile top bar */}
-        <div className="md:hidden flex items-center gap-2 px-2 py-2 border-b border-border/60 shrink-0 bg-background/95">
+        {/* Mobile top bar — frosted glass with accent gradient bottom border */}
+        <div
+          className="md:hidden flex items-center gap-2 px-2 py-2 shrink-0 relative"
+          style={{
+            background: 'rgba(8,8,16,0.85)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            borderBottom: '1px solid rgba(139,92,246,0.14)',
+          }}
+        >
+          {/* Accent gradient line at very bottom */}
+          <div
+            className="absolute bottom-0 left-0 right-0 h-px pointer-events-none"
+            style={{ background: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.3) 40%, rgba(139,92,246,0.3) 60%, transparent)' }}
+          />
+
           {/* Hamburger */}
           <button
             onClick={() => setSidebarOpen(true)}
@@ -57,12 +71,12 @@ export function Layout() {
           {/* Title */}
           <div className="flex-1 flex items-center justify-center gap-2 min-w-0">
             {!activeConv && (
-              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" className="shrink-0">
+              <svg width="15" height="15" viewBox="0 0 20 20" fill="none" className="shrink-0">
                 <path d="M10 2L17 6V14L10 18L3 14V6L10 2Z" stroke="#8b5cf6" strokeWidth="1.5" strokeLinejoin="round"/>
                 <circle cx="10" cy="10" r="2.5" fill="#8b5cf6"/>
               </svg>
             )}
-            <p className="text-[14px] font-semibold text-text-primary truncate">
+            <p className="text-[14px] font-semibold text-text-primary truncate" style={{ letterSpacing: '-0.3px' }}>
               {activeConv?.title || 'Lumen'}
             </p>
           </div>

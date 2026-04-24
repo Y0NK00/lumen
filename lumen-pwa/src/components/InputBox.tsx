@@ -135,7 +135,7 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false }: Inpu
             placeholder={
               isListening ? '🎤  Listening…' :
               isStreaming  ? 'Generating…'   :
-              'Message Lumen…'
+              'Ask anything…'
             }
             disabled={disabled || isListening}
             onFocus={scrollMsgListToBottom}
@@ -163,12 +163,16 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false }: Inpu
               onClick={handleSend}
               disabled={!canSend}
               title="Send"
-              className={[
-                'shrink-0 w-8 h-8 flex items-center justify-center rounded-xl mb-0.5 transition-all duration-150',
-                canSend
-                  ? 'bg-accent text-white hover:bg-accent-hover active:scale-95 shadow-sm'
-                  : 'bg-surface-active text-text-muted cursor-not-allowed',
-              ].join(' ')}
+              className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl mb-0.5 transition-all duration-150 active:scale-95"
+            style={canSend ? {
+              background: 'linear-gradient(135deg, #9f7aea 0%, #7c3aed 100%)',
+              boxShadow: '0 2px 8px 2px rgba(139,92,246,0.35)',
+              color: 'white',
+            } : {
+              background: 'var(--color-surface-active)',
+              color: 'var(--color-text-muted)',
+              cursor: 'not-allowed',
+            }}
             >
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                 <path d="M6.5 1L6.5 12M6.5 1L2 5.5M6.5 1L11 5.5"
@@ -178,9 +182,6 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false }: Inpu
           )}
         </div>
 
-        <p className="mt-1.5 text-center text-[11px] text-text-muted/50 select-none">
-          Lumen · Enter to send · Shift+Enter for new line
-        </p>
       </div>
     </div>
   )
