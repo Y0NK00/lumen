@@ -87,6 +87,8 @@ export function useStream() {
             store().upsertConversation(conversation)
             store().setMessages(convId!, messages)
           }).catch(() => {})
+        } else if (event === 'title_updated') {
+          store().updateConversationTitle(convId, (d.title as string))
         } else if (event === 'error') {
           if (flushTimer) { clearTimeout(flushTimer); flushTimer = null }
           if (assistantMsgId) {

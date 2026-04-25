@@ -5,6 +5,7 @@ interface InputBoxProps {
   onStop: () => void
   isStreaming: boolean
   disabled?: boolean
+  onSystemPrompt?: () => void
 }
 
 // Web Speech API — webkit prefix for Safari/iOS
@@ -13,7 +14,7 @@ const SpeechRecognitionAPI: (new () => any) | undefined =
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
 
-export function InputBox({ onSend, onStop, isStreaming, disabled = false }: InputBoxProps) {
+export function InputBox({ onSend, onStop, isStreaming, disabled = false, onSystemPrompt }: InputBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [isListening, setIsListening] = useState(false)
   const [hasText, setHasText] = useState(false)
@@ -105,7 +106,23 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false }: Inpu
           }}
         >
 
-          {/* Voice button — hidden while streaming */}
+          {/* System prompt button */}
+          {!!onSystemPrompt && !isStreaming && (
+            <button
+              onClick={onSystemPrompt}
+              title="System prompt"
+              className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl transition-colors mb-0.5"
+              style={{ color: 'var(--color-text-muted)' }}
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-accent)'; e.currentTarget.style.background = `color-mix(in srgb, var(--color-accent) 10%, transparent)` }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-muted)'; e.currentTarget.style.background = 'transparent' }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </button>
+          )}
+
+          {/* Voice button - hidden while streaming */}
           {!!SpeechRecognitionAPI && !isStreaming && (
             <button
               onClick={toggleVoice}

@@ -105,3 +105,25 @@ export function abortStream(conversationId: string): boolean {
   activeStreams.delete(conversationId);
   return true;
 }
+
+// Generate a short title for a conversation from the first user message.
+// Uses haiku — cheap and fast. Returns null on failure so callers can ignore.
+export async function generateTitle(firstMessage: string): Promise<string | null> {
+  try {
+    const res = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 30,
+      messages: [{
+        role: 'user',
+        content: `Give this conversation a concise title in 4-6 words. Reply with ONLY the title, no quotes, no punctuation at the end.\n\nMessage: ${firstMessage.slice(0, 500)}`,
+      }],
+    });
+    const block = res.content[0];
+    if (block.type === 'text') {
+      return block.text.trim().slice(0, 100);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

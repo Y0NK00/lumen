@@ -5,17 +5,16 @@ import { checkBudget } from '../middleware/budget.js';
 import { getConversationById, updateConversation } from '../db/repos/conversations.js';
 import { getMessages, createMessage } from '../db/repos/messages.js';
 import { recordUsage } from '../db/repos/usage.js';
-import { streamAnthropicMessage, abortStream } from '../services/providers/anthropic.js';
+import { listMemories } from '../db/repos/memory.js';
+import { streamAnthropicMessage, generateTitle, abortStream } from '../services/providers/anthropic.js';
 import { logger } from '../lib/logger.js';
 
 const sendMessageBody = z.object({
   content: z.string().min(1).max(100_000),
   model: z.enum(['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001']).optional(),
-  // Future: attachments
 });
 
 export async function messageRoutes(app: FastifyInstance) {
-  // POST /api/conversations/:id/messages  — SSE streaming
   app.post(
     '/api/conversations/:id/messages',
     { preHandler: [requireAuth, checkBudget] },
@@ -35,6 +34,10 @@ export async function messageRoutes(app: FastifyInstance) {
 
       const model = parsed.data.model ?? conversation.model;
 
+      // Check if this is the very first message (for auto-title)
+      const existingMessages = getMessages(conversationId, userId);
+      const isFirstMessage = existingMessages.length === 0;
+
       // Save user message
       const userMessage = createMessage({
         conversationId,
@@ -43,12 +46,10 @@ export async function messageRoutes(app: FastifyInstance) {
         content: [{ type: 'text', text: parsed.data.content }],
       });
 
-      // Update conversation timestamp
       updateConversation(conversationId, userId, {
         lastMessageAt: new Date().toISOString(),
       });
 
-      // Create placeholder assistant message (filled after stream)
       const assistantMessage = createMessage({
         conversationId,
         userId,
@@ -57,7 +58,6 @@ export async function messageRoutes(app: FastifyInstance) {
         finishReason: null,
       });
 
-      // Hijack reply — we're driving the raw HTTP response from here
       reply.hijack();
       reply.raw.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -70,21 +70,19 @@ export async function messageRoutes(app: FastifyInstance) {
         try {
           reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
         } catch {
-          // client disconnected mid-stream
+          // client disconnected
         }
       };
 
-      // Notify client: user message saved
       sendEvent('message_created', { messageId: userMessage.id, role: 'user' });
-      // Notify client: assistant message placeholder created, streaming begins
       sendEvent('assistant_start', { messageId: assistantMessage.id });
 
-      // Build message history for Anthropic
+      // Build history
       const history = getMessages(conversationId, userId).filter(
         (m) => m.role === 'user' || m.role === 'assistant'
       );
       const anthropicMessages = history
-        .filter((m) => m.id !== assistantMessage.id) // exclude the empty placeholder
+        .filter((m) => m.id !== assistantMessage.id)
         .map((m) => ({
           role: m.role as 'user' | 'assistant',
           content: m.content
@@ -92,17 +90,24 @@ export async function messageRoutes(app: FastifyInstance) {
             .map((b) => ({ type: 'text' as const, text: (b as { type: string; text: string }).text })),
         }));
 
+      // Build system prompt — inject memories if any exist
+      const memories = listMemories(userId);
+      let systemPrompt = conversation.systemPrompt ?? null;
+      if (memories.length > 0) {
+        const memBlock = `<memory>\n${memories.map((m) => `- ${m.content}`).join('\n')}\n</memory>`;
+        systemPrompt = systemPrompt ? `${memBlock}\n\n${systemPrompt}` : memBlock;
+      }
+
       try {
         const result = await streamAnthropicMessage({
           conversationId,
           assistantMessageId: assistantMessage.id,
           model,
-          systemPrompt: conversation.systemPrompt,
+          systemPrompt,
           messages: anthropicMessages,
           onEvent: sendEvent,
         });
 
-        // Persist complete assistant message
         const { updateMessageContent } = await import('../db/repos/messages.js');
         updateMessageContent(
           assistantMessage.id,
@@ -110,7 +115,6 @@ export async function messageRoutes(app: FastifyInstance) {
           result.finishReason
         );
 
-        // Record token usage + cost
         recordUsage({
           userId,
           conversationId,
@@ -123,34 +127,36 @@ export async function messageRoutes(app: FastifyInstance) {
           costUsd: result.costUsd,
         });
 
+        // Auto-title: generate from first user message using haiku (fast, cheap)
+        if (isFirstMessage && conversation.title === 'New chat') {
+          generateTitle(parsed.data.content).then((title) => {
+            if (title) {
+              updateConversation(conversationId, userId, { title });
+              sendEvent('title_updated', { title });
+            }
+          }).catch(() => {});
+        }
+
         sendEvent('done', { messageId: assistantMessage.id, finishReason: result.finishReason });
-        logger.info(
-          { userId, conversationId, model, costUsd: result.costUsd },
-          'message.streamed'
-        );
+        logger.info({ userId, conversationId, model, costUsd: result.costUsd }, 'message.streamed');
       } catch (err) {
         logger.error({ err, userId, conversationId }, 'message stream failed');
-        // error event already sent by provider
       } finally {
         reply.raw.end();
       }
     }
   );
 
-  // POST /api/conversations/:id/abort
   app.post(
     '/api/conversations/:id/abort',
     { preHandler: requireAuth },
     async (req, reply) => {
       const { id: conversationId } = req.params as { id: string };
       const userId = req.auth!.userId;
-
-      // Verify ownership before aborting
       const conversation = getConversationById(conversationId, userId);
       if (!conversation) {
         return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Conversation not found' } });
       }
-
       const aborted = abortStream(conversationId);
       return reply.send({ ok: true, aborted });
     }

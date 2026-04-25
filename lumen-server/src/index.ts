@@ -26,6 +26,7 @@ import { settingsRoutes } from './routes/settings.js';
 import { usageRoutes } from './routes/usage.js';
 import { adminRoutes } from './routes/admin.js';
 import { oauthRoutes } from './routes/oauth.js';
+import { memoryRoutes } from './routes/memory.js';
 
 async function main() {
   const app = Fastify({
@@ -48,6 +49,7 @@ async function main() {
   await app.register(usageRoutes);
   await app.register(adminRoutes);
   await app.register(oauthRoutes);
+  await app.register(memoryRoutes);
   // TODO: vault, tasks, ws (browser extension WebSocket)
 
   // ── Static PWA (production only) ────────────────────────────────────────────

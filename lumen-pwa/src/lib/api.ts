@@ -131,3 +131,40 @@ export async function deleteConversation(id: string): Promise<void> {
 export async function abortConversation(id: string): Promise<void> {
   await apiFetch(`/api/conversations/${id}/abort`, { method: 'POST' }).catch(() => {})
 }
+
+// ── Memory ────────────────────────────────────────────────────────────────────
+
+export interface Memory {
+  id: string
+  userId: string
+  content: string
+  source: string
+  createdAt: string
+}
+
+export async function listMemories(): Promise<Memory[]> {
+  const data = await apiJSON<{ memories: Memory[] }>('/api/memory')
+  return data.memories
+}
+
+export async function createMemory(content: string): Promise<Memory> {
+  const data = await apiJSON<{ memory: Memory }>('/api/memory', {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  })
+  return data.memory
+}
+
+export async function deleteMemory(id: string): Promise<void> {
+  await apiFetch(`/api/memory/${id}`, { method: 'DELETE' })
+}
+
+// ── OAuth ─────────────────────────────────────────────────────────────────────
+
+export async function getOAuthStatus(): Promise<{ connected: boolean; scope?: string; expiresAt?: string }> {
+  return apiJSON('/api/oauth/google/status')
+}
+
+export async function disconnectOAuth(): Promise<void> {
+  await apiFetch('/api/oauth/google', { method: 'DELETE' })
+}

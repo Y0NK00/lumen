@@ -23,6 +23,7 @@ interface AppStore {
   setConversations: (convs: ConversationSummary[]) => void
   upsertConversation: (conv: ConversationSummary) => void
   removeConversation: (id: string) => void
+  updateConversationTitle: (id: string, title: string) => void
 
   // ── Active conversation ──────────────────────────────────────────────────
   activeId: string | null
@@ -53,6 +54,12 @@ export const useAppStore = create<AppStore>((set) => ({
           : [conv, ...s.conversations],
       }
     }),
+  updateConversationTitle: (id, title) =>
+    set((s) => ({
+      conversations: s.conversations.map((c) =>
+        c.id === id ? { ...c, title } : c
+      ),
+    })),
   removeConversation: (id) =>
     set((s) => ({
       conversations: s.conversations.filter((c) => c.id !== id),
