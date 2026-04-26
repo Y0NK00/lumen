@@ -5,34 +5,38 @@
 
 ---
 
-## BUG-001 — Black screen when message is loading (iOS Safari)
+## BUG-001 — Black screen when message reply comes in (iOS Safari)
 
-**Status:** Fixed  
-**File:** `lumen-pwa/src/components/MessageList.tsx`
+**Status:** Fixed (Session 3 — real root cause found in Session 4)  
+**File:** `lumen-pwa/src/components/Layout.tsx`
 
-**Symptom:** Screen goes black while a message is loading. Refreshing the page fixes it.
+**Symptom:** Screen goes completely black when the AI response starts streaming. Refresh fixes it.
 
-**Root cause:** `scrollIntoView({ behavior: 'smooth' })` triggers a known iOS Safari repaint bug. Safari tries to animate the scroll, loses the compositing layer, and paints the screen black until the animation completes.
+**Root cause (real):** `backdropFilter: 'blur(20px)'` + `WebkitBackdropFilter: 'blur(20px)'` on the ALWAYS-VISIBLE mobile top bar in `Layout.tsx`. This forces the entire page into a GPU compositing layer. When React re-renders streaming content at ~30fps, iOS Safari can't maintain that compositing layer and flashes black on every repaint.
 
-**Fix:** Changed `behavior: 'smooth'` → `behavior: 'auto'` everywhere in MessageList.
+**Fix:** Removed `backdropFilter` and `WebkitBackdropFilter` from the mobile top bar. Changed background to solid `rgba(8,8,16,0.97)`.
 
-**Do NOT change this back to 'smooth'.** It looks nicer but breaks iOS.
+**Do NOT add backdrop-filter to any always-visible element.** It's a compositing layer trap on iOS. Blur effects are fine on modals/overlays that aren't open during streaming.
+
+**Earlier wrong guess:** Session 3 thought it was `scrollIntoView({ behavior: 'smooth' })`. That was wrong — changing it to `'auto'` didn't fix the black screen because the real cause was the backdrop-filter in Layout.tsx.
 
 ---
 
-## BUG-002 — Response not visible / message stuck at bottom after streaming
+## BUG-002 — Response not visible / view doesn't follow streaming content
 
 **Status:** Fixed  
-**File:** `lumen-pwa/src/components/MessageList.tsx`
+**File:** `lumen-pwa/src/components/MessageList.tsx`, `lumen-pwa/src/components/ChatPane.tsx`
 
-**Symptom:** The AI response appears but the view doesn't follow it as it streams in. User has to manually scroll down to see the response.
+**Symptom:** The AI response streams in but the view doesn't scroll to follow it. User has to manually scroll down.
 
-**Root cause:** The scroll `useEffect` only fired when `messages.length` changed, not during streaming when message *content* updates. So after the first token, the view stayed wherever it was.
+**Root cause:** Original scroll `useEffect` watched `messages.length` only — fired when a message was added, not as its content grew. Added `isStreaming` prop but the first attempt used `[messages]` as the dependency which fired `scrollIntoView` 30x/sec, causing extra repaints.
 
-**Fix:** 
-- Changed the `useEffect` dependency from `messages.length` to `messages` (full array).
-- Added "sticky scroll" logic: during content updates, only scroll if the user is already within 150px of the bottom. This way users can scroll up to read history without being yanked back down mid-stream.
-- Added `containerRef` to the scroll container div for measuring distance from bottom.
+**Fix (final):**
+- `useEffect([messages.length])` handles new message added → immediate scroll to bottom.
+- Separate `useEffect([isStreaming])` starts a `requestAnimationFrame` loop while streaming. The RAF loop checks if user is within 150px of bottom (sticky scroll) and sets `scrollTop` directly — no `scrollIntoView` calls during streaming.
+- `isStreaming` passed as prop from `ChatPane` (which gets it from `useStream`).
+
+**Rule:** Never watch `[messages]` (full array) in a scroll useEffect. Zustand creates a new array on every delta → fires every 33ms → performance trap.
 
 ---
 
@@ -61,12 +65,28 @@
 **Status:** Fixed  
 **Files:** `lumen-pwa/src/components/MessageList.tsx`, `lumen-pwa/src/components/ChatPane.tsx`
 
-**Symptom:** If a message fails or the user wants to resend, there's no button to do it.
+**Symptom:** If a message fails or the user wants to resend, there's no button to do it. First attempt had the button permanently invisible on mobile (hover states don't work on touch).
 
 **Fix:**
-- Added `ResendButton` component to `MessageList.tsx` — a small circular arrow icon that appears on hover (`group-hover:opacity-100`) to the left of user message bubbles.
+- Added `ResendButton` component — circular arrow icon to the left of each user message bubble.
+- Button is always visible at 40% opacity (not hover-only). Highlights on `onMouseEnter` / `onTouchStart`.
 - Added `onResend?: (content: string) => void` prop to `MessageList`.
 - Wired `handleSend` → `onResend` in `ChatPane.tsx`.
+
+**Rule:** Never use `opacity-0 group-hover:opacity-100` for touch-primary UI. Hover doesn't exist on mobile. Use low base opacity instead.
+
+---
+
+## BUG-008 — Message list jumps to top when keyboard opens on iOS
+
+**Status:** Fixed  
+**File:** `lumen-pwa/src/hooks/useVisualViewport.ts`
+
+**Symptom:** Tapping the input box to type causes the message list to jump to the top instead of staying at the last message.
+
+**Root cause:** `useVisualViewport` used `requestAnimationFrame` to scroll after the viewport height changed. On iOS, `rAF` fires during the keyboard animation before the layout has finished settling. `scrollHeight` is measured incorrectly mid-animation, so the scroll lands in the wrong place.
+
+**Fix:** Changed `requestAnimationFrame` → `setTimeout(..., 150)` to wait for the keyboard animation to finish before measuring and scrolling.
 
 ---
 

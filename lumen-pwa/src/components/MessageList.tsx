@@ -11,16 +11,18 @@ function messageText(msg: DisplayMessage): string {
     .join('')
 }
 
-/** Resend icon button */
+/** Resend icon button — always visible at low opacity on mobile (no hover state on touch) */
 function ResendButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       title="Resend"
-      className="resend-btn opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg transition-all duration-150 mt-1"
-      style={{ color: 'var(--color-text-muted)', background: 'transparent' }}
-      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--color-accent)'; (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--color-accent) 10%, transparent)' }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--color-text-muted)'; (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+      className="w-6 h-6 flex items-center justify-center rounded-lg transition-all duration-150 mt-1 active:scale-90"
+      style={{ color: 'var(--color-text-muted)', background: 'transparent', opacity: 0.45 }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; (e.currentTarget as HTMLElement).style.color = 'var(--color-accent)' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.45'; (e.currentTarget as HTMLElement).style.color = 'var(--color-text-muted)' }}
+      onTouchStart={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; (e.currentTarget as HTMLElement).style.color = 'var(--color-accent)' }}
+      onTouchEnd={e => { setTimeout(() => { (e.currentTarget as HTMLElement).style.opacity = '0.45'; (e.currentTarget as HTMLElement).style.color = 'var(--color-text-muted)' }, 200) }}
     >
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
@@ -72,29 +74,38 @@ const STARTERS: { title: string; sub: string }[] = [
 interface MessageListProps {
   messages: DisplayMessage[]
   onResend?: (content: string) => void
+  isStreaming?: boolean
 }
 
-export function MessageList({ messages, onResend }: MessageListProps) {
-  const bottomRef = useRef<HTMLDivElement>(null)
+export function MessageList({ messages, onResend, isStreaming }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const prevLengthRef = useRef(0)
 
+  // Scroll to bottom whenever a new message is added (user sends or assistant reply starts)
   useEffect(() => {
-    const container = containerRef.current
-    const newMsg = messages.length !== prevLengthRef.current
-
-    if (newMsg) {
-      // New message added — always scroll to bottom
+    if (messages.length !== prevLengthRef.current) {
       prevLengthRef.current = messages.length
-      bottomRef.current?.scrollIntoView({ behavior: 'auto' })
-    } else if (container) {
-      // Content update (streaming) — only scroll if user is already near the bottom
-      const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
-      if (distFromBottom < 150) {
-        bottomRef.current?.scrollIntoView({ behavior: 'auto' })
-      }
+      const el = containerRef.current
+      if (el) el.scrollTop = el.scrollHeight
     }
-  }, [messages])
+  }, [messages.length])
+
+  // While streaming, run a RAF loop that sticky-scrolls only if user is near the bottom.
+  // This avoids firing scrollIntoView 30x/sec which causes extra repaints on iOS.
+  useEffect(() => {
+    if (!isStreaming) return
+    let rafId: number
+    const tick = () => {
+      const el = containerRef.current
+      if (el) {
+        const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+        if (distFromBottom < 150) el.scrollTop = el.scrollHeight
+      }
+      rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafId)
+  }, [isStreaming])
 
   if (messages.length === 0) {
     return (
@@ -203,7 +214,7 @@ export function MessageList({ messages, onResend }: MessageListProps) {
           </div>
         )
       })}
-      <div ref={bottomRef} className="h-2" />
+      <div className="h-2" />
     </div>
   )
 }

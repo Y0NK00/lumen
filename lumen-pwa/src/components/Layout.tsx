@@ -80,9 +80,9 @@ export function Layout() {
         <div
           className="md:hidden flex items-center gap-2 px-2 py-2 shrink-0 relative"
           style={{
-            background: 'rgba(8,8,16,0.85)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
+            // No backdrop-filter here — it creates a GPU compositing layer that
+            // causes iOS Safari to flash black during rapid streaming re-renders.
+            background: 'rgba(8,8,16,0.97)',
             borderBottom: '1px solid color-mix(in srgb, var(--color-accent) 14%, transparent)',
           } as React.CSSProperties}
         >

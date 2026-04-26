@@ -13,12 +13,13 @@ export function useVisualViewport() {
       const h = vv ? vv.height : window.innerHeight
       document.documentElement.style.setProperty('--viewport-height', `${h}px`)
 
-      // After the layout reflows with the new height, scroll the message list
-      // to the bottom so the last message is always visible above the keyboard.
-      requestAnimationFrame(() => {
-        const msgList = document.querySelector('[data-message-list]')
+      // Delay scroll until the iOS keyboard animation finishes (~300ms).
+      // requestAnimationFrame fires too early — the layout hasn't settled yet,
+      // so scrollHeight is wrong and the list jumps to the wrong position.
+      setTimeout(() => {
+        const msgList = document.querySelector('[data-message-list]') as HTMLElement | null
         if (msgList) msgList.scrollTop = msgList.scrollHeight
-      })
+      }, 150)
     }
 
     update()
