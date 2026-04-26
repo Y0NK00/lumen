@@ -47,6 +47,7 @@ RUN addgroup -g 1001 lumen && adduser -u 1001 -G lumen -s /bin/sh -D lumen
 COPY --from=server-builder --chown=lumen:lumen /app/dist ./dist
 # schema.sql is not emitted by tsc — copy it explicitly
 COPY --from=server-builder --chown=lumen:lumen /app/src/db/schema.sql ./dist/src/db/schema.sql
+COPY --from=server-builder --chown=lumen:lumen /app/src/db/migrations ./dist/src/db/migrations
 COPY --from=server-builder --chown=lumen:lumen /app/node_modules ./node_modules
 COPY --from=server-builder --chown=lumen:lumen /app/package.json ./
 

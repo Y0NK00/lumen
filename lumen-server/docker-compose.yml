@@ -38,7 +38,7 @@ services:
       - NODE_ENV=production
       - DATA_DIR=/data
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7747/api/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:7747/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
