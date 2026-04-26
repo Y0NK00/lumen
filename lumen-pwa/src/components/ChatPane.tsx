@@ -139,7 +139,7 @@ export function ChatPane() {
         </div>
       )}
 
-      <MessageList messages={messages} />
+      <MessageList messages={messages} onResend={handleSend} />
 
       <InputBox
         onSend={handleSend}

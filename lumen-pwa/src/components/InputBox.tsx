@@ -20,6 +20,8 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false, onSyst
   const [hasText, setHasText] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
+  // Text that existed in the textarea before voice started — prepended to transcript
+  const preVoiceTextRef = useRef<string>('')
 
   useEffect(() => {
     if (!isStreaming) textareaRef.current?.focus()
@@ -65,8 +67,13 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false, onSyst
       return
     }
 
+    // Save any text already in the box so we can prepend it to the transcript
+    preVoiceTextRef.current = textareaRef.current?.value.trim() ?? ''
+
     const recognition = new SpeechRecognitionAPI()
-    recognition.continuous = false
+    // continuous: true keeps listening through natural pauses instead of stopping
+    // after the first silence (the original bug causing early cutoff on iOS)
+    recognition.continuous = true
     recognition.interimResults = true
     recognition.lang = 'en-US'
 
@@ -76,12 +83,15 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false, onSyst
       for (let i = 0; i < e.results.length; i++) { transcript += e.results[i][0].transcript }
       const el = textareaRef.current
       if (el) {
-        el.value = transcript
+        // Prepend any text that was in the box before voice started
+        const prefix = preVoiceTextRef.current
+        el.value = prefix ? `${prefix} ${transcript}` : transcript
         resize()
       }
     }
 
     recognition.onend = () => setIsListening(false)
+    // On error, preserve existing text — don't wipe anything
     recognition.onerror = () => setIsListening(false)
 
     recognitionRef.current = recognition
