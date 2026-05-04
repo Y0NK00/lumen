@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { sseStream } from '../lib/stream'
 import { useAppStore } from '../stores/appStore'
+import { useWorkspaceStore } from '../stores/workspaceStore'
 import { createConversation, getConversation } from '../lib/api'
 
 export function useStream() {
@@ -16,8 +17,9 @@ export function useStream() {
     // Create a new conversation if none is active
     let convId = conversationId ?? s.activeId
     if (!convId) {
-      const conv = await createConversation()
-      s.upsertConversation(conv)
+      const workspace = useWorkspaceStore.getState().mode
+      const conv = await createConversation({ workspace })
+      useWorkspaceStore.getState().upsertInList(conv)
       s.setActiveId(conv.id)
       convId = conv.id
     }
@@ -84,11 +86,14 @@ export function useStream() {
           store().finalizeStreamingMessage(convId, assistantMsgId)
           // Refresh with server-persisted data
           getConversation(convId).then(({ conversation, messages }) => {
-            store().upsertConversation(conversation)
+            useWorkspaceStore.getState().upsertInList(conversation)
             store().setMessages(convId!, messages)
           }).catch(() => {})
         } else if (event === 'title_updated') {
           store().updateConversationTitle(convId, (d.title as string))
+          getConversation(convId).then(({ conversation }) => {
+            useWorkspaceStore.getState().upsertInList(conversation)
+          }).catch(() => {})
         } else if (event === 'error') {
           if (flushTimer) { clearTimeout(flushTimer); flushTimer = null }
           if (assistantMsgId) {

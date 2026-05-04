@@ -5,6 +5,7 @@ interface AuthStore {
   user: User | null
   token: string | null
   setAuth: (token: string, user: User) => void
+  setUser: (user: User) => void
   clearAuth: () => void
 }
 
@@ -16,6 +17,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
   setAuth: (token, user) => {
     localStorage.setItem('lumen_token', token)
     set({ token, user })
+  },
+
+  setUser: (user) => {
+    set({ user })
   },
 
   clearAuth: () => {

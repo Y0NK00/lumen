@@ -1,144 +1,107 @@
-# Lumen AI — Session Handoff
-**Date:** April 26, 2026  
-**Session duration:** ~2 sessions (compacted mid-session)  
-**Last commit:** `3ae276d` — feat: auto-title, memory system, system prompt per chat, OAuth connectors UI
+# Session handoff — Desktop shell & Claude-style layout
+
+**Last updated:** 2026-05-03  
+**Workspace:** `C:\Dev\tower-ai-app`  
+**Focus:** `lumen-pwa` — Electron/desktop header: Chat / Cowork / Code + New chat placement vs Claude reference.
 
 ---
 
-## What Was Built This Session
+## Goal (user intent)
 
-### 5 Features Implemented (all committed)
+Match **Claude desktop** behavior for the **main column chrome**:
 
-**1. Auto-title generation**
-- After the first message in a new chat, server fires a background Haiku call asking for a 4-6 word title
-- Server sends `title_updated` SSE event → frontend updates sidebar instantly
-- Files: `lumen-server/src/services/providers/anthropic.ts` (added `generateTitle()`), `lumen-server/src/routes/messages.ts`, `lumen-pwa/src/hooks/useStream.ts`, `lumen-pwa/src/stores/appStore.ts` (added `updateConversationTitle`)
-
-**2. Memory system**
-- Full CRUD: `GET /api/memory`, `POST /api/memory`, `DELETE /api/memory/:id`
-- Memories injected into every message as `<memory>\n- item\n</memory>` block prepended to system prompt
-- UI: Settings → Memory page (add inline, delete with ×)
-- Files: `lumen-server/src/db/migrations/002_memories.sql`, `lumen-server/src/db/repos/memory.ts`, `lumen-server/src/routes/memory.ts`, `lumen-server/src/index.ts`
-
-**3. System prompt per chat**
-- `conversations.system_prompt` column (already existed in schema)
-- Lock icon button in InputBox opens modal to set/edit per-chat system prompt
-- Indicator bar below mobile header when a system prompt is active (click to edit)
-- Files: `lumen-pwa/src/components/ChatPane.tsx` (SystemPromptModal + indicator), `lumen-pwa/src/components/InputBox.tsx` (lock button + `onSystemPrompt` prop)
-
-**4. OAuth / Google Connectors UI**
-- Settings → Connectors page with Google OAuth connect/disconnect
-- Status indicator (connected green dot + scope/expiry info, or disconnected state)
-- Frontend calls `GET /api/oauth/status` and `POST /api/oauth/disconnect`
-- Note: the server OAuth routes were already built in a prior session; this was the frontend UI
-- Files: `lumen-pwa/src/components/SettingsView.tsx` (ConnectorsPage), `lumen-pwa/src/lib/api.ts` (`getOAuthStatus`, `disconnectOAuth`)
-
-**5. New chat button icon**
-- Changed from `+` to compose/pencil icon (matches Claude.ai style)
-- File: `lumen-pwa/src/components/Layout.tsx`
-
-### Unraid Infrastructure (done via Claude in Chrome)
-
-**Auto-prune cron job — set up and verified live:**
-```
-/etc/cron.d/docker-prune:
-0 3 * * 0 root docker system prune -f; docker builder prune -f
-```
-Runs every Sunday at 3am. Prunes stopped containers, dangling images, unused networks, build cache. Does NOT touch volumes (Plex data, game saves, etc. are safe).
-
-**Persistent across reboots — appended to `/boot/config/go`:**
-```bash
-# Docker cleanup cron (weekly Sunday 3am)
-echo "0 3 * * 0 root docker system prune -f; docker builder prune -f" > /etc/cron.d/docker-prune
-```
-
-**Docker vdisk:** Already 60GB — no resize needed. The "no space left" error during builds was purely build cache bloat, now handled by the weekly prune.
+1. **Chat / Cowork / Code** and **+ New chat** live in the **main area**, **under** the top toolbar (hamburger, sidebar toggle, search, back/forward), **left-aligned** with that toolbar — not centered in the pane.
+2. Controls should read as **integrated app chrome**, not a **small floating card** in empty space.
 
 ---
 
-## Current State
+## What was wrong (root causes)
 
-### What's committed but NOT yet deployed
-The last successful deploy was before this session's features. The Docker build on Unraid failed due to disk space. The code is correct — the build itself just never completed.
+| Problem | Cause in code |
+|--------|----------------|
+| Block sat in the **center** of the main pane | `DesktopMainHeader` row 2 used a **3-column grid** with the workspace UI in the **center** column (`justify-center`). |
+| Block looked like a **detached “island”** | `Layout.tsx` wrapped tabs + New chat in a **`w-fit` + `rounded-2xl` + border + drop-shadow** “card” — visually separate from the toolbar and from the empty `ChatPane` below. |
+| **Duplicate New chat** | Sidebar had its own **New chat** row while the main header also had **+ New chat** (Claude stacks it only under the mode tabs in the main column). |
 
-**To deploy:**
-1. Open Unraid terminal
-2. Run: `docker system prune -f && docker builder prune -f` (free up space now)
-3. Trigger the Lumen container rebuild (however you do it — Portainer, Unraid Docker UI, or `docker-compose up --build -d`)
-4. After deploy, clear PWA service worker on your phone: Settings → Clear site data, or just open devtools and click "Update" on the SW
-
-### What's NOT tested yet (needs a working deploy first)
-- Auto-title: does the sidebar title update after first message?
-- Memory: can you add/delete memories in Settings → Memory, and do they inject into the next chat?
-- System prompt: does the lock icon open the modal, does the indicator show, does it actually affect responses?
-- Connectors: does the Google OAuth status call work, does connect/disconnect work?
+**Left-aligning alone** fixed centering but **not** the “floating widget” look — that required **removing the outer card** and **merging** the header rows visually.
 
 ---
 
-## Pending Feature Backlog (from previous planning)
+## What was implemented (files & behavior)
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Auto-title | ✅ Built | Needs deploy verification |
-| Memory system | ✅ Built | Needs deploy verification |
-| System prompt per chat | ✅ Built | Needs deploy verification |
-| OAuth connectors UI | ✅ Built | Needs deploy verification |
-| Delete chat | 🔲 Not started | Should be next after verify pass |
-| Conversation search | 🔲 Not started | Sidebar search bar |
-| Export chat | 🔲 Not started | Nice-to-have |
+### `lumen-pwa/src/components/WindowChrome.tsx`
 
----
+- **`DesktopMainHeader`**
+  - **Row 1:** `TopCommandBar` (left) + drag region + `WindowControlButtons`.
+  - **Row 2:** **`flex justify-start`** + `px-2` — workspace panel is **flush left**, same horizontal padding as row 1 (no grid centering).
+  - Removed **border-t** between row 1 and row 2 so the header reads as **one continuous block** instead of “toolbar | divider | panel.”
 
-## Architecture Reminders
+### `lumen-pwa/src/components/Layout.tsx`
 
-**Server:** Fastify + SQLite (better-sqlite3) + SSE streaming  
-**Frontend:** React + Vite PWA + Zustand  
-**Hosting:** Unraid Docker container, exposed via Twingate  
-**DB migrations:** Drop numbered `.sql` files in `lumen-server/src/db/migrations/` — they run automatically on container start via `db-migrate.js`  
-**SSE events:** `message_created`, `assistant_start`, `text_delta`, `title_updated`, `done`, `error`
+- **`workspacePanel` prop** to `DesktopMainHeader`:
+  - Removed outer **`rounded-2xl` / border / heavy shadow** wrapper.
+  - Replaced with a simple **`flex flex-col gap-2 w-full max-w-[420px]`** stack.
+  - **`WorkspaceTabs`** (`variant="main"`, `inCard`) — segment control keeps its own surface/inset styling.
+  - **+ New chat** button: **`var(--color-surface)`** background so it reads as a row, not nested inside a second frame.
 
-**Known quirks:**
-- Write tool has a ~281 line size limit and silently truncates — use bash heredoc for large files
-- Em dashes (`—`) in JSX comments cause TSX parse errors — avoid them
-- PWA service worker caches aggressively — always clear SW after deploys on mobile
+### `lumen-pwa/src/components/Sidebar.tsx`
 
----
+- Removed the top **NavRow “New chat”** (single entry point is now the main-column button).
+- Removed dead code: **`newChatProjectId`**, **`handleNew`**, and unused **`createConversation`** import.
 
-## Key File Paths
+### Build
 
-```
-lumen-pwa/src/
-  components/
-    Layout.tsx          — mobile header, new chat button, swipe gesture
-    ChatPane.tsx        — message list, system prompt modal + indicator
-    InputBox.tsx        — input pill, voice, lock icon, send/stop
-    Sidebar.tsx         — conversation list, theme picker
-    SettingsView.tsx    — appearance, memory, connectors pages
-    MessageList.tsx     — message bubbles
-  stores/appStore.ts    — Zustand store (conversations, activeId, updateConversationTitle)
-  hooks/useStream.ts    — SSE event handler
-  lib/api.ts            — all fetch wrappers
-
-lumen-server/src/
-  index.ts              — Fastify app, route registration
-  routes/
-    messages.ts         — POST /api/conversations/:id/messages (streaming)
-    memory.ts           — GET/POST/DELETE /api/memory
-    conversations.ts    — CRUD for conversations
-  db/
-    migrations/         — numbered SQL files (001_init.sql, 002_memories.sql)
-    repos/
-      memory.ts         — listMemories, createMemory, deleteMemory
-  services/providers/
-    anthropic.ts        — streaming + generateTitle()
-```
+- **`npm run build`** in `lumen-pwa` succeeds (`tsc && vite build`).
 
 ---
 
-## Next Session Checklist
+## What may still feel “off” vs Claude (not bugs — design deltas)
 
-1. **Deploy first** — prune Docker on Unraid, rebuild container
-2. **Verify all 5 features** on the live app (see "What's NOT tested" above)
-3. **Fix any bugs** that surface during verification
-4. **Delete chat** — next feature to build (soft delete on server, remove from sidebar)
-5. **Consider:** Chat export, conversation search, mobile polish pass
+These are **optional** follow-ups if pixel parity matters:
+
+- **Width:** Workspace stack is **`max-w-[420px]`** — Claude may use a different max width or full-bleed segment bar.
+- **Density / typography:** Tab labels, padding, and **selected** tab styling may still differ from Claude.
+- **Empty main area:** With no messages, **`ChatPane`** is mostly empty — the header stack will still look small relative to the window; that is expected unless empty-state or layout changes fill the column.
+- **Sidebar vs reference:** Sidebar still shows **Projects / Artifacts / Customize / More** — broader product parity is separate from header alignment.
+
+---
+
+## What’s left on the build (broader backlog)
+
+### PWA / UI (see also `UI_HANDOFF.md`)
+
+- Replace **inline `onMouseEnter` / `onMouseLeave`** hover hacks with **Tailwind + CSS variables** where listed.
+- **Hardcoded accent hex** in SVGs → `var(--color-accent)`.
+- **Sidebar search** placeholder (class-based), duplicate settings control, **aria-labels**, **`div[role=button]` → `<button>`**, etc.
+
+### Product / server (see `LUMEN_BUILD_PLAN.md`)
+
+Examples still accurate at high level: **conversation search** (UI present, not fully wired), **projects/artifacts** depth, **scheduled tasks**, **attachments**, **vault**, etc. — confirm against current `lumen-server` routes when picking up backend work.
+
+### Jarvis / Phase 4
+
+See **`AI_HANDOFF-5-2.md`** — next architectural step called out there: **pywebview** (or similar) desktop shell for HUD.
+
+---
+
+## Quick pointers for the next session
+
+| Topic | Primary files |
+|------|----------------|
+| Desktop header layout | `lumen-pwa/src/components/WindowChrome.tsx`, `Layout.tsx` |
+| Workspace modes & tabs | `lumen-pwa/src/components/WorkspaceTabs.tsx`, `stores/workspaceStore.ts` |
+| Command bar / hamburger | `lumen-pwa/src/components/TopCommandBar.tsx` |
+| Main chat body | `lumen-pwa/src/components/ChatPane.tsx` |
+
+**Dev:** from repo root, `npm run dev` (or `lumen-pwa`: `npm run dev`); Electron if using `electron:dev` per package scripts.
+
+---
+
+## Related docs in this repo
+
+| File | Purpose |
+|------|---------|
+| `AI_HANDOFF-5-2.md` | Full project orientation, deploy, API, tripwires, Jarvis |
+| `UI_HANDOFF.md` | PWA UI cleanup checklist (hover, a11y, sidebar) |
+| `LUMEN_BUILD_PLAN.md` | Long-term build status and startup prompt block |
+| `CHANGELOG.md` | Dated change log entries |

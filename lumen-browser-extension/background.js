@@ -10,7 +10,7 @@
 //   stays alive. No offscreen document needed.
 //
 // Flow:
-//   Lumen (main.js) → WebSocket → HERE → Chrome APIs → result → WebSocket → Lumen
+//   Lumen server (extension bridge on port 7745) → WebSocket → HERE → Chrome APIs → result → WebSocket → Lumen
 //
 // Tab isolation:
 //   ALL browsing commands (navigate, click, type, scroll, get_content,

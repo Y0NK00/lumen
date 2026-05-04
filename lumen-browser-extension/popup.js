@@ -13,7 +13,8 @@ function setStatus(state) {
     sub.style.color = '#4ade80'
   } else if (state === 'disconnected') {
     label.textContent = 'Lumen not running'
-    sub.textContent = 'Start Lumen with npm run dev:v2 — the extension reconnects automatically.'
+    sub.textContent =
+      'Start lumen-server (e.g. npm run dev in lumen-server). The extension uses ws://localhost:7745 and reconnects automatically.'
     sub.style.color = '#6b7280'
   } else {
     label.textContent = 'Checking…'

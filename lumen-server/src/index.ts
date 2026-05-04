@@ -16,6 +16,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import { logger } from './lib/logger.js';
 import { bootstrapAdmin } from './bootstrap.js';
 import { healthRoutes } from './routes/health.js';
@@ -27,6 +28,10 @@ import { usageRoutes } from './routes/usage.js';
 import { adminRoutes } from './routes/admin.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { memoryRoutes } from './routes/memory.js';
+import { projectRoutes } from './routes/projects.js';
+import { artifactRoutes } from './routes/artifacts.js';
+import { scheduledTaskRoutes } from './routes/scheduledTasks.js';
+import { startExtensionBridge } from './extensionBridge.js';
 
 async function main() {
   const app = Fastify({
@@ -50,15 +55,18 @@ async function main() {
   await app.register(adminRoutes);
   await app.register(oauthRoutes);
   await app.register(memoryRoutes);
-  // TODO: vault, tasks, ws (browser extension WebSocket)
+  await app.register(projectRoutes);
+  await app.register(artifactRoutes);
+  await app.register(scheduledTaskRoutes);
 
   // ── Static PWA (production only) ────────────────────────────────────────────
   // In dev the Vite dev server handles this; in production the built PWA lives
   // at ./public (copied from lumen-pwa/dist during Docker build).
   const publicDir = path.resolve('public');
   const isProd = process.env.NODE_ENV === 'production';
+  const hasPublicDir = existsSync(publicDir);
 
-  if (isProd) {
+  if (isProd && hasPublicDir) {
     await app.register(fastifyStatic, {
       root: publicDir,
       prefix: '/',
@@ -72,6 +80,8 @@ async function main() {
     app.setNotFoundHandler(async (_req, reply) => {
       return reply.sendFile('index.html', publicDir);
     });
+  } else if (isProd && !hasPublicDir) {
+    logger.warn({ path: publicDir }, 'production mode but public/ dir missing — PWA not served (run build first)');
   }
 
   // ── Bootstrap ────────────────────────────────────────────────────────────────
@@ -83,6 +93,8 @@ async function main() {
 
   await app.listen({ port, host });
   logger.info({ port, host }, 'lumen-server listening');
+
+  startExtensionBridge();
 }
 
 main().catch((err) => {

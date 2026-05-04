@@ -23,9 +23,35 @@ function getGoogleConfig() {
   };
 }
 
-// In-memory PKCE state store — maps state → { userId, codeVerifier, expiresAt }
-// Good enough for a homelab single-instance server. Cleans up on each request.
-const pendingStates = new Map<string, { userId: string; codeVerifier: string; expiresAt: number }>();
+function getGithubConfig() {
+  const clientId = process.env.GITHUB_CLIENT_ID;
+  const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+  const redirectBase = process.env.PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 7747}`;
+
+  if (!clientId || !clientSecret) {
+    return null;
+  }
+
+  return {
+    clientId,
+    clientSecret,
+    redirectUri: `${redirectBase}/api/oauth/github/callback`,
+  };
+}
+
+/** Google consent: profile + Calendar + Drive (read-only) + offline refresh. */
+const GOOGLE_OAUTH_SCOPE =
+  'openid email profile https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.readonly';
+
+/** GitHub OAuth App — repo + user read for connectors / Code tools. */
+const GITHUB_OAUTH_SCOPE = 'read:user user:email repo';
+
+// In-memory OAuth state — single-instance homelab server.
+type PendingOAuth =
+  | { userId: string; expiresAt: number; flow: 'google'; codeVerifier: string }
+  | { userId: string; expiresAt: number; flow: 'github' };
+
+const pendingStates = new Map<string, PendingOAuth>();
 
 function cleanExpiredStates() {
   const now = Date.now();
@@ -34,7 +60,6 @@ function cleanExpiredStates() {
   }
 }
 
-// PKCE helpers (no external dep, using Node built-ins)
 function base64urlEncode(buf: Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
@@ -54,12 +79,46 @@ const callbackQuery = z.object({
   error: z.string().optional(),
 });
 
+const oauthProviderParam = z.enum(['google', 'github']);
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 export async function oauthRoutes(app: FastifyInstance) {
+  // ── Aggregated connector list (UI) ─────────────────────────────────────────
+  app.get('/api/oauth/connectors', { preHandler: requireAuth }, async (req, reply) => {
+    const userId = req.auth!.userId;
+
+    const googleRow = db
+      .prepare(`SELECT scope FROM oauth_tokens WHERE user_id = ? AND provider = 'google'`)
+      .get(userId) as { scope: string } | undefined;
+
+    const githubRow = db
+      .prepare(`SELECT scope FROM oauth_tokens WHERE user_id = ? AND provider = 'github'`)
+      .get(userId) as { scope: string } | undefined;
+
+    return reply.send({
+      items: [
+        {
+          id: 'google' as const,
+          name: 'Google',
+          description: 'Drive (read-only), Gmail, Calendar',
+          configured: !!getGoogleConfig(),
+          connected: !!googleRow,
+          scope: googleRow?.scope ?? null,
+        },
+        {
+          id: 'github' as const,
+          name: 'GitHub',
+          description: 'Repositories and profile for tools & Code',
+          configured: !!getGithubConfig(),
+          connected: !!githubRow,
+          scope: githubRow?.scope ?? null,
+        },
+      ],
+    });
+  });
+
   // GET /api/oauth/google/start
-  // Redirects the user to Google's consent screen.
-  // Query param ?redirect_to= is where the frontend should land after success.
   app.get('/api/oauth/google/start', { preHandler: requireAuth }, async (req, reply) => {
     const config = getGoogleConfig();
     if (!config) {
@@ -75,15 +134,16 @@ export async function oauthRoutes(app: FastifyInstance) {
 
     pendingStates.set(state, {
       userId: req.auth!.userId,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      flow: 'google',
       codeVerifier: verifier,
-      expiresAt: Date.now() + 10 * 60 * 1000, // 10 min
     });
 
     const params = new URLSearchParams({
       client_id: config.clientId,
       redirect_uri: config.redirectUri,
       response_type: 'code',
-      scope: 'openid email profile https://www.googleapis.com/auth/calendar',
+      scope: GOOGLE_OAUTH_SCOPE,
       access_type: 'offline',
       prompt: 'consent',
       state,
@@ -95,8 +155,6 @@ export async function oauthRoutes(app: FastifyInstance) {
   });
 
   // GET /api/oauth/google/callback
-  // Google redirects here after user consent. Exchanges code for tokens and
-  // stores them in oauth_tokens. Redirects to the frontend on success/failure.
   app.get('/api/oauth/google/callback', async (req, reply) => {
     const q = callbackQuery.safeParse(req.query);
     const frontendBase = process.env.FRONTEND_URL ?? process.env.PUBLIC_URL ?? 'http://localhost:3000';
@@ -113,7 +171,7 @@ export async function oauthRoutes(app: FastifyInstance) {
 
     cleanExpiredStates();
     const pending = pendingStates.get(state);
-    if (!pending || pending.expiresAt < Date.now()) {
+    if (!pending || pending.expiresAt < Date.now() || pending.flow !== 'google') {
       return reply.redirect(302, `${frontendBase}/settings?oauth=error&reason=state_expired`);
     }
     pendingStates.delete(state);
@@ -123,7 +181,6 @@ export async function oauthRoutes(app: FastifyInstance) {
       return reply.redirect(302, `${frontendBase}/settings?oauth=error&reason=not_configured`);
     }
 
-    // Exchange authorization code for tokens
     let tokenData: {
       access_token: string;
       refresh_token?: string;
@@ -152,7 +209,7 @@ export async function oauthRoutes(app: FastifyInstance) {
         return reply.redirect(302, `${frontendBase}/settings?oauth=error&reason=token_exchange_failed`);
       }
 
-      tokenData = await tokenRes.json() as typeof tokenData;
+      tokenData = (await tokenRes.json()) as typeof tokenData;
     } catch (err) {
       logger.error({ err }, 'oauth.google.token_exchange_error');
       return reply.redirect(302, `${frontendBase}/settings?oauth=error&reason=network_error`);
@@ -160,8 +217,6 @@ export async function oauthRoutes(app: FastifyInstance) {
 
     const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
 
-    // Upsert into oauth_tokens
-    // TODO: encrypt access_token and refresh_token at rest before storing
     db.prepare(
       `INSERT INTO oauth_tokens (id, user_id, provider, access_token, refresh_token, scope, expires_at)
        VALUES (?, ?, 'google', ?, ?, ?, ?)
@@ -184,7 +239,113 @@ export async function oauthRoutes(app: FastifyInstance) {
     return reply.redirect(302, `${frontendBase}/settings?oauth=success`);
   });
 
-  // GET /api/oauth/google/status  — is Google connected for this user?
+  // GET /api/oauth/github/start
+  app.get('/api/oauth/github/start', { preHandler: requireAuth }, async (req, reply) => {
+    const config = getGithubConfig();
+    if (!config) {
+      return reply.code(501).send({
+        error: { code: 'NOT_CONFIGURED', message: 'GitHub OAuth is not configured on this server' },
+      });
+    }
+
+    cleanExpiredStates();
+    const state = nanoid(24);
+    pendingStates.set(state, {
+      userId: req.auth!.userId,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      flow: 'github',
+    });
+
+    const params = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: config.redirectUri,
+      scope: GITHUB_OAUTH_SCOPE,
+      state,
+      allow_signup: 'true',
+    });
+
+    return reply.redirect(302, `https://github.com/login/oauth/authorize?${params.toString()}`);
+  });
+
+  // GET /api/oauth/github/callback
+  app.get('/api/oauth/github/callback', async (req, reply) => {
+    const q = callbackQuery.safeParse(req.query);
+    const frontendBase = process.env.FRONTEND_URL ?? process.env.PUBLIC_URL ?? 'http://localhost:3000';
+
+    if (!q.success || q.data.error) {
+      logger.warn({ error: q.data?.error }, 'oauth.github.callback.denied');
+      return reply.redirect(302, `${frontendBase}/settings?oauth=error&reason=${encodeURIComponent(q.data?.error ?? 'unknown')}`);
+    }
+
+    const { code, state } = q.data;
+    if (!code || !state) {
+      return reply.redirect(302, `${frontendBase}/settings?oauth=error&reason=missing_params`);
+    }
+
+    cleanExpiredStates();
+    const pending = pendingStates.get(state);
+    if (!pending || pending.expiresAt < Date.now() || pending.flow !== 'github') {
+      return reply.redirect(302, `${frontendBase}/settings?oauth=error&reason=state_expired`);
+    }
+    pendingStates.delete(state);
+
+    const config = getGithubConfig();
+    if (!config) {
+      return reply.redirect(302, `${frontendBase}/settings?oauth=error&reason=not_configured`);
+    }
+
+    let accessToken: string;
+    let scope: string;
+
+    try {
+      const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          client_id: config.clientId,
+          client_secret: config.clientSecret,
+          code,
+          redirect_uri: config.redirectUri,
+        }).toString(),
+      });
+
+      const body = (await tokenRes.json()) as {
+        access_token?: string;
+        scope?: string;
+        error?: string;
+        error_description?: string;
+      };
+
+      if (!tokenRes.ok || !body.access_token) {
+        logger.error({ status: tokenRes.status, body }, 'oauth.github.token_exchange_failed');
+        return reply.redirect(302, `${frontendBase}/settings?oauth=error&reason=token_exchange_failed`);
+      }
+
+      accessToken = body.access_token;
+      scope = body.scope ?? GITHUB_OAUTH_SCOPE;
+    } catch (err) {
+      logger.error({ err }, 'oauth.github.token_exchange_error');
+      return reply.redirect(302, `${frontendBase}/settings?oauth=error&reason=network_error`);
+    }
+
+    // GitHub user tokens from this flow typically do not expire; store open-ended refresh as null.
+    db.prepare(
+      `INSERT INTO oauth_tokens (id, user_id, provider, access_token, refresh_token, scope, expires_at)
+       VALUES (?, ?, 'github', ?, NULL, ?, NULL)
+       ON CONFLICT(user_id, provider) DO UPDATE SET
+         access_token  = excluded.access_token,
+         scope         = excluded.scope,
+         updated_at    = datetime('now')`
+    ).run(`ot_${nanoid(16)}`, pending.userId, accessToken, scope);
+
+    logger.info({ userId: pending.userId }, 'oauth.github.connected');
+    return reply.redirect(302, `${frontendBase}/settings?oauth=success`);
+  });
+
+  // GET /api/oauth/google/status  (legacy — prefer /api/oauth/connectors)
   app.get('/api/oauth/google/status', { preHandler: requireAuth }, async (req, reply) => {
     const row = db
       .prepare(`SELECT id, scope, expires_at, updated_at FROM oauth_tokens WHERE user_id = ? AND provider = 'google'`)
@@ -202,13 +363,20 @@ export async function oauthRoutes(app: FastifyInstance) {
     });
   });
 
-  // DELETE /api/oauth/google  — disconnect / revoke stored tokens
-  app.delete('/api/oauth/google', { preHandler: requireAuth }, async (req, reply) => {
-    const result = db
-      .prepare(`DELETE FROM oauth_tokens WHERE user_id = ? AND provider = 'google'`)
-      .run(req.auth!.userId);
+  // DELETE /api/oauth/:provider
+  app.delete('/api/oauth/:provider', { preHandler: requireAuth }, async (req, reply) => {
+    const parsed = oauthProviderParam.safeParse((req.params as { provider?: string }).provider);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: { code: 'INVALID_PROVIDER', message: 'Use google or github' },
+      });
+    }
 
-    logger.info({ userId: req.auth!.userId }, 'oauth.google.disconnected');
+    const result = db
+      .prepare(`DELETE FROM oauth_tokens WHERE user_id = ? AND provider = ?`)
+      .run(req.auth!.userId, parsed.data);
+
+    logger.info({ userId: req.auth!.userId, provider: parsed.data }, 'oauth.disconnected');
     return reply.send({ ok: true, removed: result.changes > 0 });
   });
 }

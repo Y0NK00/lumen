@@ -32,11 +32,11 @@ export function LoginPage() {
       <div className="w-full max-w-[360px]">
         {/* Logo mark */}
         <div className="flex items-center gap-2.5 mb-8 justify-center">
-          <div className="w-8 h-8 rounded-xl bg-accent/20 border border-accent/30 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-xl bg-accent/20 border border-accent/30 flex items-center justify-center text-accent">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M8 2L14 5.5V10.5L8 14L2 10.5V5.5L8 2Z"
-                stroke="#8b5cf6" strokeWidth="1.5" strokeLinejoin="round" />
-              <circle cx="8" cy="8" r="2" fill="#8b5cf6" />
+                stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+              <circle cx="8" cy="8" r="2" fill="currentColor" />
             </svg>
           </div>
           <span className="text-[18px] font-semibold text-text-primary tracking-tight">Lumen</span>

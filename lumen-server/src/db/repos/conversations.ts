@@ -1,11 +1,12 @@
 import { db } from '../connection.js';
 import { nanoid } from 'nanoid';
-import type { Conversation } from '../../types/index.js';
+import type { Conversation, ConversationWorkspace } from '../../types/index.js';
 
 interface ConversationRow {
   id: string;
   user_id: string;
   project_id: string | null;
+  workspace: string;
   title: string;
   model: string;
   system_prompt: string | null;
@@ -16,10 +17,12 @@ interface ConversationRow {
 }
 
 function rowToConversation(row: ConversationRow): Conversation {
+  const ws = (row.workspace ?? 'chat') as ConversationWorkspace;
   return {
     id: row.id,
     userId: row.user_id,
     projectId: row.project_id,
+    workspace: ws === 'cowork' || ws === 'code' ? ws : 'chat',
     title: row.title,
     model: row.model,
     systemPrompt: row.system_prompt,
@@ -34,6 +37,7 @@ export interface ListConversationsOptions {
   limit?: number;
   cursor?: string;
   projectId?: string | null;
+  workspace?: ConversationWorkspace;
 }
 
 export function listConversations(opts: ListConversationsOptions): Conversation[] {
@@ -41,6 +45,10 @@ export function listConversations(opts: ListConversationsOptions): Conversation[
   const params: unknown[] = [opts.userId];
   let sql = `SELECT * FROM conversations WHERE user_id = ? AND deleted_at IS NULL`;
 
+  if (opts.workspace) {
+    sql += ` AND workspace = ?`;
+    params.push(opts.workspace);
+  }
   if (opts.projectId) {
     sql += ` AND project_id = ?`;
     params.push(opts.projectId);
@@ -63,19 +71,22 @@ export interface CreateConversationInput {
   userId: string;
   title?: string;
   projectId?: string | null;
+  workspace?: ConversationWorkspace;
   model?: string;
   systemPrompt?: string | null;
 }
 
 export function createConversation(input: CreateConversationInput): Conversation {
   const id = `c_${nanoid(16)}`;
+  const workspace = input.workspace ?? 'chat';
   db.prepare(
-    `INSERT INTO conversations (id, user_id, project_id, title, model, system_prompt)
-     VALUES (?, ?, ?, ?, ?, ?)`
+    `INSERT INTO conversations (id, user_id, project_id, workspace, title, model, system_prompt)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.userId,
     input.projectId ?? null,
+    workspace,
     input.title ?? 'New chat',
     input.model ?? 'claude-sonnet-4-6',
     input.systemPrompt ?? null
@@ -95,6 +106,7 @@ export interface UpdateConversationInput {
   model?: string;
   systemPrompt?: string | null;
   projectId?: string | null;
+  workspace?: ConversationWorkspace;
   lastMessageAt?: string;
 }
 
@@ -110,6 +122,7 @@ export function updateConversation(
   if (input.model !== undefined) { fields.push('model = ?'); params.push(input.model); }
   if ('systemPrompt' in input) { fields.push('system_prompt = ?'); params.push(input.systemPrompt ?? null); }
   if ('projectId' in input) { fields.push('project_id = ?'); params.push(input.projectId ?? null); }
+  if (input.workspace !== undefined) { fields.push('workspace = ?'); params.push(input.workspace); }
   if (input.lastMessageAt !== undefined) { fields.push('last_message_at = ?'); params.push(input.lastMessageAt); }
 
   params.push(id, userId);

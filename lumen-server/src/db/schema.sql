@@ -1,38 +1,30 @@
--- Lumen Server SQLite Schema v1
--- Apply with: sqlite3 data/lumen.db < src/db/schema.sql
---
--- Design notes:
--- - All tables have user_id FK where user-owned; enforced in app layer via WHERE clauses
--- - Soft delete via deleted_at IS NULL filters (preserves audit trail)
--- - Timestamps stored as ISO 8601 TEXT in UTC (SQLite has no native datetime)
--- - IDs are nanoid strings (21 chars) prefixed by type: u_, c_, m_, etc.
--- - JSON blobs stored as TEXT (SQLite JSON1 extension for querying if needed)
+-- Lumen Server SQLite Schema v2
+-- Applied automatically at startup via connection.ts (idempotent -- all IF NOT EXISTS)
 
 PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
 
--- ── Users ──
+-- Users
 CREATE TABLE IF NOT EXISTS users (
-  id                      TEXT PRIMARY KEY,          -- u_xxx
+  id                      TEXT PRIMARY KEY,
   email                   TEXT NOT NULL UNIQUE,
-  password_hash           TEXT NOT NULL,             -- bcrypt
+  password_hash           TEXT NOT NULL,
   display_name            TEXT NOT NULL,
-  role                    TEXT NOT NULL DEFAULT 'user'  -- 'user' | 'admin'
-                            CHECK (role IN ('user', 'admin')),
+  role                    TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
   monthly_budget_usd      REAL NOT NULL DEFAULT 25.00,
-  budget_alert_threshold  REAL NOT NULL DEFAULT 0.80, -- notify at 80%
-  disabled                INTEGER NOT NULL DEFAULT 0,  -- 0|1
-  settings_json           TEXT NOT NULL DEFAULT '{}', -- per-user settings blob
+  budget_alert_threshold  REAL NOT NULL DEFAULT 0.80,
+  disabled                INTEGER NOT NULL DEFAULT 0,
+  settings_json           TEXT NOT NULL DEFAULT '{}',
   created_at              TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at              TEXT NOT NULL DEFAULT (datetime('now')),
   deleted_at              TEXT
 );
-CREATE INDEX idx_users_email ON users(email) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE deleted_at IS NULL;
 
--- ── Sessions (JWT jti tracking for revocation) ──
+-- Sessions
 CREATE TABLE IF NOT EXISTS sessions (
-  jti          TEXT PRIMARY KEY,          -- JWT ID claim
+  jti          TEXT PRIMARY KEY,
   user_id      TEXT NOT NULL REFERENCES users(id),
   issued_at    TEXT NOT NULL DEFAULT (datetime('now')),
   expires_at   TEXT NOT NULL,
@@ -40,12 +32,12 @@ CREATE TABLE IF NOT EXISTS sessions (
   user_agent   TEXT,
   ip_address   TEXT
 );
-CREATE INDEX idx_sessions_user ON sessions(user_id);
-CREATE INDEX idx_sessions_expires ON sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 
--- ── Projects (Helms) ──
+-- Projects
 CREATE TABLE IF NOT EXISTS projects (
-  id             TEXT PRIMARY KEY,          -- p_xxx
+  id             TEXT PRIMARY KEY,
   user_id        TEXT NOT NULL REFERENCES users(id),
   name           TEXT NOT NULL,
   description    TEXT,
@@ -55,13 +47,14 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
   deleted_at     TEXT
 );
-CREATE INDEX idx_projects_user ON projects(user_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id) WHERE deleted_at IS NULL;
 
--- ── Conversations ──
+-- Conversations (workspace column added in v2)
 CREATE TABLE IF NOT EXISTS conversations (
-  id              TEXT PRIMARY KEY,        -- c_xxx
+  id              TEXT PRIMARY KEY,
   user_id         TEXT NOT NULL REFERENCES users(id),
   project_id      TEXT REFERENCES projects(id),
+  workspace       TEXT NOT NULL DEFAULT 'chat',
   title           TEXT NOT NULL DEFAULT 'New chat',
   model           TEXT NOT NULL DEFAULT 'claude-sonnet-4-6',
   system_prompt   TEXT,
@@ -70,39 +63,39 @@ CREATE TABLE IF NOT EXISTS conversations (
   last_message_at TEXT,
   deleted_at      TEXT
 );
-CREATE INDEX idx_conv_user ON conversations(user_id, last_message_at DESC) WHERE deleted_at IS NULL;
-CREATE INDEX idx_conv_project ON conversations(project_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_conv_user ON conversations(user_id, last_message_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_conv_project ON conversations(project_id) WHERE deleted_at IS NULL;
 
--- ── Messages ──
+-- Messages
 CREATE TABLE IF NOT EXISTS messages (
-  id               TEXT PRIMARY KEY,       -- m_xxx
+  id               TEXT PRIMARY KEY,
   conversation_id  TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  user_id          TEXT NOT NULL REFERENCES users(id),  -- denormalized for fast user-scoped queries
+  user_id          TEXT NOT NULL REFERENCES users(id),
   role             TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
-  content_json     TEXT NOT NULL,          -- content blocks (text, tool_use, tool_result, image)
-  finish_reason    TEXT,                   -- 'end_turn', 'tool_use', 'max_tokens', 'stop_sequence', 'error'
+  content_json     TEXT NOT NULL,
+  finish_reason    TEXT,
   created_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX idx_msg_conv ON messages(conversation_id, created_at);
-CREATE INDEX idx_msg_user ON messages(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_msg_user ON messages(user_id, created_at DESC);
 
--- ── Attachments (images, files pinned to a message) ──
+-- Attachments
 CREATE TABLE IF NOT EXISTS attachments (
-  id           TEXT PRIMARY KEY,            -- a_xxx
+  id           TEXT PRIMARY KEY,
   message_id   TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
   user_id      TEXT NOT NULL REFERENCES users(id),
   kind         TEXT NOT NULL CHECK (kind IN ('image', 'file', 'audio')),
   filename     TEXT,
   mime_type    TEXT,
   size_bytes   INTEGER,
-  storage_key  TEXT NOT NULL,               -- filesystem path under /data/attachments/{user_id}/
+  storage_key  TEXT NOT NULL,
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX idx_att_msg ON attachments(message_id);
+CREATE INDEX IF NOT EXISTS idx_att_msg ON attachments(message_id);
 
--- ── Usage Events (per-message token + cost tracking) ──
+-- Usage Events
 CREATE TABLE IF NOT EXISTS usage_events (
-  id                  TEXT PRIMARY KEY,     -- e_xxx
+  id                  TEXT PRIMARY KEY,
   user_id             TEXT NOT NULL REFERENCES users(id),
   conversation_id     TEXT REFERENCES conversations(id),
   message_id          TEXT REFERENCES messages(id),
@@ -114,15 +107,15 @@ CREATE TABLE IF NOT EXISTS usage_events (
   cost_usd            REAL NOT NULL DEFAULT 0,
   created_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX idx_usage_user_time ON usage_events(user_id, created_at DESC);
-CREATE INDEX idx_usage_user_month ON usage_events(user_id, substr(created_at, 1, 7));
+CREATE INDEX IF NOT EXISTS idx_usage_user_time ON usage_events(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_user_month ON usage_events(user_id, substr(created_at, 1, 7));
 
--- ── OAuth Tokens (per-user third-party credentials, e.g., Google) ──
+-- OAuth Tokens
 CREATE TABLE IF NOT EXISTS oauth_tokens (
   id             TEXT PRIMARY KEY,
   user_id        TEXT NOT NULL REFERENCES users(id),
-  provider       TEXT NOT NULL,             -- 'google'
-  access_token   TEXT NOT NULL,             -- encrypted at rest (see lib/crypto.ts)
+  provider       TEXT NOT NULL,
+  access_token   TEXT NOT NULL,
   refresh_token  TEXT,
   scope          TEXT,
   expires_at     TEXT,
@@ -131,19 +124,19 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
   UNIQUE(user_id, provider)
 );
 
--- ── Extension Tokens (long-lived tokens for browser extension auth) ──
+-- Extension Tokens
 CREATE TABLE IF NOT EXISTS extension_tokens (
-  id          TEXT PRIMARY KEY,
-  user_id     TEXT NOT NULL REFERENCES users(id),
-  token_hash  TEXT NOT NULL UNIQUE,         -- sha256 of the actual token
-  name        TEXT NOT NULL,                -- user-friendly label, e.g., "Work Chrome"
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL REFERENCES users(id),
+  token_hash   TEXT NOT NULL UNIQUE,
+  name         TEXT NOT NULL,
   last_used_at TEXT,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  revoked_at  TEXT
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  revoked_at   TEXT
 );
-CREATE INDEX idx_ext_user ON extension_tokens(user_id) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_ext_user ON extension_tokens(user_id) WHERE revoked_at IS NULL;
 
--- ── Scheduled Tasks ──
+-- Scheduled Tasks
 CREATE TABLE IF NOT EXISTS scheduled_tasks (
   id           TEXT PRIMARY KEY,
   user_id      TEXT NOT NULL REFERENCES users(id),
@@ -157,43 +150,43 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX idx_tasks_user ON scheduled_tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_user ON scheduled_tasks(user_id);
 
--- ── Audit Log (admin actions, auth events, budget triggers) ──
+-- Audit Log
 CREATE TABLE IF NOT EXISTS audit_log (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id     TEXT REFERENCES users(id),   -- nullable for anonymous events
-  actor_id    TEXT REFERENCES users(id),   -- who did it (null = system)
-  event_type  TEXT NOT NULL,               -- 'auth.login', 'auth.login_failed', 'user.created', 'budget.exceeded', etc.
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id      TEXT REFERENCES users(id),
+  actor_id     TEXT REFERENCES users(id),
+  event_type   TEXT NOT NULL,
   details_json TEXT,
-  ip_address  TEXT,
-  user_agent  TEXT,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  ip_address   TEXT,
+  user_agent   TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX idx_audit_time ON audit_log(created_at DESC);
-CREATE INDEX idx_audit_user ON audit_log(user_id, created_at DESC);
-CREATE INDEX idx_audit_type ON audit_log(event_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_type ON audit_log(event_type, created_at DESC);
 
--- ── Vault Index (per-user semantic search embeddings) ──
+-- Vault Chunks
 CREATE TABLE IF NOT EXISTS vault_chunks (
   id          TEXT PRIMARY KEY,
   user_id     TEXT NOT NULL REFERENCES users(id),
-  file_path   TEXT NOT NULL,               -- relative to user's vault root
+  file_path   TEXT NOT NULL,
   chunk_index INTEGER NOT NULL,
   content     TEXT NOT NULL,
-  embedding   BLOB NOT NULL,                -- Float32Array serialized
+  embedding   BLOB NOT NULL,
   updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX idx_vault_user_file ON vault_chunks(user_id, file_path);
+CREATE INDEX IF NOT EXISTS idx_vault_user_file ON vault_chunks(user_id, file_path);
 
--- ── Schema Version (for migrations) ──
+-- Schema Version
 CREATE TABLE IF NOT EXISTS schema_version (
-  version     INTEGER PRIMARY KEY,
-  applied_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  version    INTEGER PRIMARY KEY,
+  applied_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-INSERT OR IGNORE INTO schema_version (version) VALUES (1);
+INSERT OR IGNORE INTO schema_version (version) VALUES (2);
 
--- ── Memories (user-defined context injected into every conversation) ──
+-- Memories
 CREATE TABLE IF NOT EXISTS memories (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL REFERENCES users(id),

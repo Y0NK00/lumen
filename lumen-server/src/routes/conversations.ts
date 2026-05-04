@@ -13,9 +13,12 @@ import {
 import { getMessages } from '../db/repos/messages.js';
 import { logger } from '../lib/logger.js';
 
+const workspaceEnum = z.enum(['chat', 'cowork', 'code']);
+
 const createConversationBody = z.object({
   title: z.string().max(255).optional(),
   projectId: z.string().nullable().optional(),
+  workspace: workspaceEnum.optional(),
   model: z.enum(['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001']).optional(),
   systemPrompt: z.string().nullable().optional(),
 });
@@ -23,6 +26,7 @@ const createConversationBody = z.object({
 const updateConversationBody = z.object({
   title: z.string().max(255).optional(),
   projectId: z.string().nullable().optional(),
+  workspace: workspaceEnum.optional(),
   model: z.enum(['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001']).optional(),
   systemPrompt: z.string().nullable().optional(),
 });
@@ -31,6 +35,7 @@ const listQuery = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional(),
   cursor: z.string().optional(),
   project_id: z.string().optional(),
+  workspace: workspaceEnum.optional(),
 });
 
 export async function conversationRoutes(app: FastifyInstance) {
@@ -46,6 +51,7 @@ export async function conversationRoutes(app: FastifyInstance) {
       limit: q.data.limit,
       cursor: q.data.cursor,
       projectId: q.data.project_id,
+      workspace: q.data.workspace,
     });
 
     const items = conversations.map((c) => ({

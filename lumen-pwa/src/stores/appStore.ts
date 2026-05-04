@@ -39,6 +39,9 @@ interface AppStore {
   // ── Streaming state ──────────────────────────────────────────────────────
   streamingConvId: string | null
   setStreamingConvId: (id: string | null) => void
+
+  /** Clear cached conversations/messages so the next login loads fresh lists. */
+  resetSession: () => void
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -105,4 +108,13 @@ export const useAppStore = create<AppStore>((set) => ({
 
   streamingConvId: null,
   setStreamingConvId: (streamingConvId) => set({ streamingConvId }),
+
+  resetSession: () =>
+    set({
+      conversations: [],
+      conversationsLoaded: false,
+      activeId: null,
+      messagesByConv: {},
+      streamingConvId: null,
+    }),
 }))

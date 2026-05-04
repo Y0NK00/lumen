@@ -52,10 +52,13 @@ export interface UsageEvent {
   createdAt: string;
 }
 
+export type ConversationWorkspace = 'chat' | 'cowork' | 'code';
+
 export interface Conversation {
   id: string;
   userId: string;
   projectId: string | null;
+  workspace: ConversationWorkspace;
   title: string;
   model: string;
   systemPrompt: string | null;

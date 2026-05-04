@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { getUserByEmail } from '../db/repos/users.js';
+import { db } from '../db/connection.js';
+import { getUserByEmail, getUserById } from '../db/repos/users.js';
 import { createSession, revokeSession } from '../db/repos/sessions.js';
 import { verifyPassword } from '../lib/password.js';
 import { signToken } from '../lib/token.js';
@@ -56,6 +57,25 @@ export async function authRoutes(app: FastifyInstance) {
   app.get('/api/auth/me', { preHandler: requireAuth }, async (req, reply) => {
     // At this point req.auth is set by requireAuth
     return reply.send({ auth: req.auth });
+  });
+
+  const updateMeBody = z.object({
+    displayName: z.string().min(1).max(100).optional(),
+  });
+
+  app.patch('/api/auth/me', { preHandler: requireAuth }, async (req, reply) => {
+    const parsed = updateMeBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: { code: 'BAD_REQUEST', message: 'Invalid request' } });
+    }
+    const { displayName } = parsed.data;
+    if (displayName !== undefined) {
+      db.prepare(`UPDATE users SET display_name = ?, updated_at = datetime('now') WHERE id = ?`)
+        .run(displayName, req.auth!.userId);
+    }
+    const user = getUserById(req.auth!.userId);
+    logger.info({ userId: req.auth!.userId }, 'auth.update_profile');
+    return reply.send({ user });
   });
 
   app.post('/api/auth/logout', { preHandler: requireAuth }, async (req, reply) => {

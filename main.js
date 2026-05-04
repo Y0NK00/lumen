@@ -130,9 +130,9 @@ function createWindow() {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else if (IS_V2) {
-    mainWindow.loadFile(path.join(__dirname, 'dist', 'renderer', 'index.html'));
+    mainWindow.loadFile(path.join(__dirname, 'lumen-pwa', 'dist', 'index.html'));
   } else {
-    mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+    mainWindow.loadFile(path.join(__dirname, 'lumen-pwa', 'dist', 'index.html'));
   }
  
   // Show the window once the renderer has finished its first paint.
@@ -2420,10 +2420,8 @@ ipcMain.on('win:openConversation', (_, { conversationId }) => {
 
   if (IS_V2 && IS_DEV) {
     win.loadURL(`http://localhost:5173/${query}`);
-  } else if (IS_V2) {
-    win.loadFile(path.join(__dirname, 'dist', 'renderer', 'index.html'), { query: { conv: conversationId } });
   } else {
-    win.loadFile(path.join(__dirname, 'renderer', 'index.html'), { query: { conv: conversationId } });
+    win.loadFile(path.join(__dirname, 'lumen-pwa', 'dist', 'index.html'), { query: { conv: conversationId } });
   }
 
   // Sync maximize state for child window too

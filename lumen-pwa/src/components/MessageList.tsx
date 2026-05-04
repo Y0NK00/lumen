@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import type { DisplayMessage } from '../stores/appStore'
+import { useWorkspaceStore } from '../stores/workspaceStore'
+import { useAuthStore } from '../stores/authStore'
 
 function messageText(msg: DisplayMessage): string {
   if ('isStreaming' in msg && msg.isStreaming) return msg.content
@@ -15,14 +17,11 @@ function messageText(msg: DisplayMessage): string {
 function ResendButton({ onClick }: { onClick: () => void }) {
   return (
     <button
+      type="button"
+      aria-label="Resend message"
       onClick={onClick}
       title="Resend"
-      className="w-6 h-6 flex items-center justify-center rounded-lg transition-all duration-150 mt-1 active:scale-90"
-      style={{ color: 'var(--color-text-muted)', background: 'transparent', opacity: 0.45 }}
-      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; (e.currentTarget as HTMLElement).style.color = 'var(--color-accent)' }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.45'; (e.currentTarget as HTMLElement).style.color = 'var(--color-text-muted)' }}
-      onTouchStart={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; (e.currentTarget as HTMLElement).style.color = 'var(--color-accent)' }}
-      onTouchEnd={e => { setTimeout(() => { (e.currentTarget as HTMLElement).style.opacity = '0.45'; (e.currentTarget as HTMLElement).style.color = 'var(--color-text-muted)' }, 200) }}
+      className="w-6 h-6 flex items-center justify-center rounded-lg transition-all duration-150 mt-1 active:scale-90 opacity-45 hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] active:opacity-100 active:text-[var(--color-accent)]"
     >
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
@@ -35,11 +34,16 @@ function ResendButton({ onClick }: { onClick: () => void }) {
 /** Lumen avatar — small purple hexagon dot */
 function LumenAvatar() {
   return (
-    <div className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
-      style={{ background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--color-accent) 22%, transparent)' }}>
+    <div
+      className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5 text-[var(--color-accent)]"
+      style={{
+        background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--color-accent) 22%, transparent)',
+      }}
+    >
       <svg width="11" height="11" viewBox="0 0 20 20" fill="none">
-        <path d="M10 2L17 6V14L10 18L3 14V6L10 2Z" stroke="#8b5cf6" strokeWidth="1.8" strokeLinejoin="round"/>
-        <circle cx="10" cy="10" r="2.5" fill="#8b5cf6"/>
+        <path d="M10 2L17 6V14L10 18L3 14V6L10 2Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+        <circle cx="10" cy="10" r="2.5" fill="currentColor"/>
       </svg>
     </div>
   )
@@ -64,11 +68,23 @@ function StreamingIndicator() {
 }
 
 /** Starter prompt chips — title + subtitle + arrow */
-const STARTERS: { title: string; sub: string }[] = [
+const STARTERS_CHAT: { title: string; sub: string }[] = [
   { title: 'Explain a concept',    sub: 'Simple, clear breakdown' },
   { title: 'Help me write',        sub: 'Draft, edit, or improve' },
   { title: 'Debug my code',        sub: 'Find and fix the issue' },
   { title: 'Brainstorm ideas',     sub: 'Explore options together' },
+]
+
+const STARTERS_COWORK: { title: string; sub: string }[] = [
+  { title: 'Plan my week',       sub: 'Prioritize and batch tasks' },
+  { title: 'Draft a follow-up',  sub: 'Email or message template' },
+  { title: 'Summarize a thread', sub: 'Turn noise into next steps' },
+]
+
+const STARTERS_CODE: { title: string; sub: string }[] = [
+  { title: 'Review this diff',    sub: 'Risks, tests, and refactors' },
+  { title: 'Explain an error',    sub: 'Stack trace → root cause' },
+  { title: 'Scaffold a feature',  sub: 'Files and API shape' },
 ]
 
 interface MessageListProps {
@@ -80,6 +96,9 @@ interface MessageListProps {
 export function MessageList({ messages, onResend, isStreaming }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const prevLengthRef = useRef(0)
+  const workspace = useWorkspaceStore((s) => s.mode)
+  const user = useAuthStore((s) => s.user)
+  const firstName = user?.displayName?.split(/\s+/)[0] ?? user?.email?.split('@')[0] ?? 'there'
 
   // Scroll to bottom whenever a new message is added (user sends or assistant reply starts)
   useEffect(() => {
@@ -107,61 +126,83 @@ export function MessageList({ messages, onResend, isStreaming }: MessageListProp
     return () => cancelAnimationFrame(rafId)
   }, [isStreaming])
 
-  if (messages.length === 0) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-5 px-5 pb-6" data-message-list>
-        {/* Logo + greeting */}
-        <div className="flex flex-col items-center gap-3 text-center">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
-            style={{
-              background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--color-accent) 20%, transparent)',
-              boxShadow: '0 0 24px color-mix(in srgb, var(--color-accent) 15%, transparent)',
-            }}>
-            <svg width="22" height="22" viewBox="0 0 20 20" fill="none">
-              <path d="M10 2L17 6V14L10 18L3 14V6L10 2Z" stroke="#8b5cf6" strokeWidth="1.5" strokeLinejoin="round"/>
-              <circle cx="10" cy="10" r="2.5" fill="#8b5cf6"/>
-            </svg>
-          </div>
-          <div>
-            <p className="text-[18px] font-semibold text-text-primary" style={{ letterSpacing: '-0.3px' }}>
-              How can I help?
-            </p>
-            <p className="text-[12.5px] text-text-muted mt-0.5">Powered by Claude</p>
-          </div>
-        </div>
+  const starters =
+    workspace === 'cowork' ? STARTERS_COWORK : workspace === 'code' ? STARTERS_CODE : STARTERS_CHAT
 
-        {/* Starter chips */}
-        <div className="flex flex-col gap-2 w-full max-w-sm">
-          {STARTERS.map((s) => (
-            <button
-              key={s.title}
-              className="group flex items-center justify-between px-4 py-3 rounded-xl
-                         text-left transition-all duration-150"
+  const emptyShellClass =
+    workspace === 'chat'
+      ? ''
+      : 'dot-grid-bg'
+
+  if (messages.length === 0) {
+    const title =
+      workspace === 'cowork'
+        ? "Let's knock something off your list"
+        : workspace === 'code'
+          ? `What's up next, ${firstName}?`
+          : 'How can I help?'
+    const subtitle =
+      workspace === 'chat'
+        ? 'Powered by Claude'
+        : workspace === 'cowork'
+          ? 'Cowork workspace — same column as Chat, separate history.'
+          : 'Code workspace — separate history from Chat and Cowork.'
+
+    return (
+      <div
+        className={`flex-1 flex flex-col items-center justify-center min-h-0 overflow-y-auto ${emptyShellClass}`}
+        data-message-list
+      >
+        <div className="w-[min(100%,680px)] mx-auto flex flex-col items-center justify-center gap-5 px-5 sm:px-6 pb-6 py-8 box-border">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div
+              className="w-12 h-12 rounded-2xl flex items-center justify-center"
               style={{
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(139,92,246,0.3)'
-                ;(e.currentTarget as HTMLElement).style.background = 'var(--color-surface-hover)'
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border)'
-                ;(e.currentTarget as HTMLElement).style.background = 'var(--color-surface)'
+                background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--color-accent) 20%, transparent)',
+                boxShadow: '0 0 24px color-mix(in srgb, var(--color-accent) 15%, transparent)',
               }}
             >
-              <div>
-                <p className="text-[13.5px] font-medium text-text-primary leading-snug">{s.title}</p>
-                <p className="text-[11.5px] text-text-muted mt-0.5">{s.sub}</p>
-              </div>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
-                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                className="shrink-0 text-text-muted ml-3 group-hover:text-accent transition-colors">
-                <path d="M3 7h8M7 3l4 4-4 4"/>
-              </svg>
-            </button>
-          ))}
+              <span className="text-[22px] leading-none" aria-hidden>
+                {workspace === 'code' ? '☀' : '✦'}
+              </span>
+            </div>
+            <div>
+              <p
+                className={`text-[18px] sm:text-[20px] font-semibold sm:font-normal ${workspace !== 'chat' ? 'font-display' : ''}`}
+                style={{ letterSpacing: '-0.3px', color: 'var(--color-text-primary)' }}
+              >
+                {title}
+              </p>
+              <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                {subtitle}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 w-full max-w-sm">
+            {starters.map((s) => (
+              <button
+                key={s.title}
+                type="button"
+                className="group flex items-center justify-between px-4 py-3 rounded-xl text-left transition-all duration-150 bg-[var(--color-surface)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] hover:border-[color-mix(in_srgb,var(--color-accent)_30%,transparent)]"
+                onClick={() => onResend?.(s.title)}
+              >
+                <div>
+                  <p className="text-[13.5px] font-medium leading-snug" style={{ color: 'var(--color-text-primary)' }}>
+                    {s.title}
+                  </p>
+                  <p className="text-[11.5px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{s.sub}</p>
+                </div>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                  strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                  className="shrink-0 ml-3 transition-colors"
+                  style={{ color: 'var(--color-text-muted)' }}>
+                  <path d="M3 7h8M7 3l4 4-4 4"/>
+                </svg>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -170,9 +211,10 @@ export function MessageList({ messages, onResend, isStreaming }: MessageListProp
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto overflow-x-hidden py-4 space-y-1"
+      className="flex-1 overflow-y-auto overflow-x-hidden min-h-0"
       data-message-list
     >
+      <div className="w-[min(100%,680px)] mx-auto px-5 sm:px-6 py-4 space-y-1 box-border">
       {messages.map((msg) => {
         const text = messageText(msg)
         const isUser = msg.role === 'user'
@@ -181,7 +223,7 @@ export function MessageList({ messages, onResend, isStreaming }: MessageListProp
 
         if (isUser) {
           return (
-            <div key={msg.id} className="group flex justify-end items-start gap-1.5 px-3 py-1">
+            <div key={msg.id} className="group flex justify-end items-start gap-1.5 py-1">
               {onResend && (
                 <ResendButton onClick={() => onResend(text)} />
               )}
@@ -202,7 +244,7 @@ export function MessageList({ messages, onResend, isStreaming }: MessageListProp
 
         // AI message — no bubble, avatar on left
         return (
-          <div key={msg.id} className="flex gap-2.5 px-3 py-1.5">
+          <div key={msg.id} className="flex gap-2.5 py-1.5">
             <LumenAvatar />
             <div className="flex-1 min-w-0 overflow-hidden pt-0.5">
               {isEmpty ? (
@@ -215,6 +257,7 @@ export function MessageList({ messages, onResend, isStreaming }: MessageListProp
         )
       })}
       <div className="h-2" />
+      </div>
     </div>
   )
 }

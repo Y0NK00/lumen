@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LUMEN · J.A.R.V.I.S.</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Orbitron:wght@400;500;600;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="ui-mode-immersive">
+    <canvas id="particle-canvas" class="particle-layer" aria-hidden="true"></canvas>
+    <div class="scanlines" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+
+    <div id="fs-gate" class="fs-gate" role="dialog" aria-modal="true" aria-labelledby="fs-gate-title" hidden>
+      <div class="fs-gate-card">
+        <p id="fs-gate-title" class="fs-gate-title">Initialize cinematic display</p>
+        <p class="fs-gate-hint">
+          Browsers require a tap to enter fullscreen — same idea as the TikTok-style handoff you saw.
+        </p>
+        <button type="button" class="fs-gate-btn" id="fs-gate-btn">Enter fullscreen HUD</button>
+        <button type="button" class="fs-gate-skip" id="fs-gate-skip">Skip — windowed</button>
+      </div>
+    </div>
+
+    <div class="hud-shell" id="hud-shell">
+    <div class="corner-bracket corner-tl" aria-hidden="true"></div>
+    <div class="corner-bracket corner-tr" aria-hidden="true"></div>
+
+    <header class="top-bar" id="top-bar">
+      <div class="brand">
+        <span class="brand-mark">◈</span>
+        <span class="brand-text">LUMEN</span>
+        <span class="brand-sub">Just A Rather Very Intelligent System</span>
+      </div>
+      <div class="hud-controls" role="toolbar" aria-label="Display mode">
+        <button type="button" class="hud-btn" id="btn-immersive" title="Full layout (default)">
+          Immersive
+        </button>
+        <button type="button" class="hud-btn" id="btn-desktop" title="Compact floating overlay">
+          Desktop
+        </button>
+        <button type="button" class="hud-btn hud-btn-accent" id="btn-fullscreen" title="Toggle browser fullscreen">
+          Fullscreen
+        </button>
+      </div>
+      <div class="top-metrics">
+        <div class="metric" id="metric-link">
+          <span class="metric-label">UPLINK</span>
+          <span class="metric-value" data-field="uplink">—</span>
+        </div>
+        <div class="metric" id="metric-phase">
+          <span class="metric-label">MODE</span>
+          <span class="metric-value glow" data-field="phase_label">STANDBY</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">LOCAL</span>
+          <span class="metric-value mono" data-field="clock">00:00:00</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="stage">
+      <aside class="panel panel-left">
+        <h2 class="panel-title">Telemetry</h2>
+        <div class="telemetry-grid">
+          <div class="telemetry-row">
+            <span>Core temp</span><span class="mono" data-telemetry="core_temp">36.4°C</span>
+          </div>
+          <div class="telemetry-row">
+            <span>Neural load</span><span class="mono" data-telemetry="neural_load">12%</span>
+          </div>
+          <div class="telemetry-row">
+            <span>Buffer</span><span class="mono" data-telemetry="buffer">stable</span>
+          </div>
+          <div class="telemetry-row">
+            <span>Session</span><span class="mono" data-field="session_id">—</span>
+          </div>
+        </div>
+        <div class="log-window">
+          <div class="log-header">System log</div>
+          <pre class="log-body" id="system-log"></pre>
+        </div>
+      </aside>
+
+      <section class="holo-core" aria-label="Primary interface">
+        <div class="arc-reactor" aria-hidden="true">
+          <span class="arc-core"></span>
+        </div>
+
+        <div class="rings-3d">
+        <div class="rings-tilt">
+        <div class="rings">
+          <svg class="ring ring-a" viewBox="0 0 400 400" aria-hidden="true">
+            <circle cx="200" cy="200" r="170" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.35" />
+            <circle cx="200" cy="200" r="140" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="8 14" class="spin-slow" />
+          </svg>
+          <svg class="ring ring-b" viewBox="0 0 400 400" aria-hidden="true">
+            <circle cx="200" cy="200" r="118" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="2 10" class="spin-fast" />
+          </svg>
+          <svg class="ring ring-c" viewBox="0 0 400 400" aria-hidden="true">
+            <circle cx="200" cy="200" r="92" fill="none" stroke="currentColor" stroke-width="3" opacity="0.9" />
+            <circle cx="200" cy="200" r="72" fill="none" stroke="currentColor" stroke-width="1" opacity="0.4" class="pulse-ring" />
+          </svg>
+        </div>
+        </div>
+        </div>
+
+        <div class="core-label">
+          <span class="core-status" id="core-status">All systems nominal</span>
+          <span class="core-phase" id="core-phase">STANDBY</span>
+        </div>
+
+        <div class="waveform" id="waveform" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </section>
+
+      <aside class="panel panel-right">
+        <h2 class="panel-title">Channels</h2>
+        <div class="channel channel-user">
+          <div class="channel-head">
+            <span class="channel-tag">OPERATOR</span>
+            <span class="channel-meta mono" id="user-meta"></span>
+          </div>
+          <div class="channel-body mono" id="user-text">
+            Awaiting voice input. Hold hotkey when implemented.
+          </div>
+        </div>
+        <div class="channel channel-ai">
+          <div class="channel-head">
+            <span class="channel-tag">LUMEN</span>
+            <span class="channel-meta mono" id="assistant-meta"></span>
+          </div>
+          <div class="channel-body mono" id="assistant-text">
+            Interface online. Neural relay staging for Phase 4.2+ pipeline.
+          </div>
+        </div>
+
+        <div class="hex-grid" aria-hidden="true"></div>
+      </aside>
+    </main>
+
+    <div class="ticker-wrap" aria-hidden="true">
+      <div class="ticker" id="data-ticker">
+        <span
+          >LUMEN · NEURAL UPLINK · STARK INDUSTRIES PROTOCOL · TOWER RELAY NOMINAL · HOLOGRAPHIC
+          INTERFACE · JARVIS SUBSYSTEM v0.1 ·
+        </span>
+        <span
+          >LUMEN · NEURAL UPLINK · STARK INDUSTRIES PROTOCOL · TOWER RELAY NOMINAL · HOLOGRAPHIC
+          INTERFACE · JARVIS SUBSYSTEM v0.1 ·
+        </span>
+      </div>
+    </div>
+
+    <footer class="bottom-bar">
+      <div class="corner-bracket lb"></div>
+      <div class="corner-bracket rb"></div>
+      <div class="footer-inner">
+        <span class="footer-item mono" data-field="hotkey_hint">Hotkey: ctrl+space (Phase 4.2)</span>
+        <span class="footer-center pulse-dot" id="footer-status">
+          <span class="dot"></span>
+          <span data-field="footer_message">HUD synchronized</span>
+        </span>
+        <span class="footer-item mono" data-field="server_url">—</span>
+      </div>
+    </footer>
+    </div><!-- .hud-shell -->
+
+    <script src="/particles.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,127 +1,192 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import React, { useState, useMemo, useRef, useEffect, type ReactNode } from 'react'
 import { useAppStore } from '../stores/appStore'
 import { useAuthStore } from '../stores/authStore'
-import { createConversation, deleteConversation } from '../lib/api'
-import type { ConversationSummary } from '../lib/api'
+import { useWorkspaceStore, type CoworkTab } from '../stores/workspaceStore'
+import {
+  deleteConversation,
+  logout,
+  listProjects,
+  createProject,
+  updateConversation,
+} from '../lib/api'
+import type { ConversationSummary, Project } from '../lib/api'
 
 function groupByDate(convs: ConversationSummary[]) {
   const now = new Date()
-  const today     = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const yesterday = new Date(+today - 86_400_000)
-  const week      = new Date(+today - 6 * 86_400_000)
-  const month     = new Date(+today - 29 * 86_400_000)
+  const week = new Date(+today - 6 * 86_400_000)
+  const month = new Date(+today - 29 * 86_400_000)
 
   const groups: { label: string; items: ConversationSummary[] }[] = [
-    { label: 'Today',      items: [] },
-    { label: 'Yesterday',  items: [] },
-    { label: 'This week',  items: [] },
+    { label: 'Today', items: [] },
+    { label: 'Yesterday', items: [] },
+    { label: 'This week', items: [] },
     { label: 'This month', items: [] },
-    { label: 'Older',      items: [] },
+    { label: 'Older', items: [] },
   ]
 
   for (const c of convs) {
     const d = new Date(c.lastMessageAt ?? c.updatedAt)
-    if (d >= today)          groups[0].items.push(c)
+    if (d >= today) groups[0].items.push(c)
     else if (d >= yesterday) groups[1].items.push(c)
-    else if (d >= week)      groups[2].items.push(c)
-    else if (d >= month)     groups[3].items.push(c)
-    else                     groups[4].items.push(c)
+    else if (d >= week) groups[2].items.push(c)
+    else if (d >= month) groups[3].items.push(c)
+    else groups[4].items.push(c)
   }
 
   return groups.filter((g) => g.items.length > 0)
 }
 
-type NavSection = 'chats' | 'projects' | 'artifacts' | 'code' | 'dispatch'
+type FolderFilter = 'all' | 'unfiled' | string
 
-const NAV_ITEMS: { id: NavSection; label: string; icon: React.ReactNode }[] = [
-  {
-    id: 'chats',
-    label: 'Chats',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-      </svg>
-    ),
-  },
-  {
-    id: 'projects',
-    label: 'Projects',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-      </svg>
-    ),
-  },
-  {
-    id: 'artifacts',
-    label: 'Artifacts',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
-      </svg>
-    ),
-  },
-  {
-    id: 'code',
-    label: 'Code',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="16 18 22 12 16 6"/>
-        <polyline points="8 6 2 12 8 18"/>
-      </svg>
-    ),
-  },
-  {
-    id: 'dispatch',
-    label: 'Dispatch',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-      </svg>
-    ),
-  },
-]
+function NavRow({
+  icon,
+  label,
+  onClick,
+  badge,
+  ariaLabel,
+}: {
+  icon: ReactNode
+  label: string
+  onClick: () => void
+  badge?: string
+  ariaLabel?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-left text-[13px] transition-colors duration-150 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+    >
+      <span className="shrink-0 w-4 h-4 flex items-center justify-center opacity-80">{icon}</span>
+      <span className="flex-1 min-w-0 truncate">{label}</span>
+      {badge && (
+        <span
+          className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded"
+          style={{
+            background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
+            color: 'var(--color-accent)',
+          }}
+        >
+          {badge}
+        </span>
+      )}
+    </button>
+  )
+}
 
 interface SidebarProps {
   onClose?: () => void
   onSettings?: () => void
+  onOpenFeaturePanel?: (panel: 'projects' | 'artifacts' | 'dispatch') => void
+  /** Rendered at the very top of the sidebar panel, above nav items. */
+  toolbarSlot?: React.ReactNode
+  onNewChat?: () => void
 }
 
-export function Sidebar({ onClose, onSettings }: SidebarProps) {
-  const { conversations, activeId, setActiveId, upsertConversation, removeConversation } = useAppStore()
+export function Sidebar({ onClose, onSettings, onOpenFeaturePanel, toolbarSlot, onNewChat }: SidebarProps) {
+  const { conversations, activeId, setActiveId } = useAppStore()
+  const resetSession = useAppStore((s) => s.resetSession)
+  const resetWorkspace = useWorkspaceStore((s) => s.resetWorkspace)
   const user = useAuthStore((s) => s.user)
+  const clearAuth = useAuthStore((s) => s.clearAuth)
+  const mode = useWorkspaceStore((s) => s.mode)
+  const openCowork = useWorkspaceStore((s) => s.openCowork)
+  const removeFromList = useWorkspaceStore((s) => s.removeFromList)
+  const upsertInList = useWorkspaceStore((s) => s.upsertInList)
+
   const [search, setSearch] = useState('')
-  const [activeNav, setActiveNav] = useState<NavSection>('chats')
-  const menuRef = useRef<HTMLDivElement>(null)
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const accountMenuRef = useRef<HTMLDivElement>(null)
 
-  // Close menu on outside click (kept for any future menus)
+  const [folderFilter, setFolderFilter] = useState<FolderFilter>('all')
+  const [projects, setProjects] = useState<Project[]>([])
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const renameInputRef = useRef<HTMLInputElement>(null)
+
+  const showFolderBar = mode === 'cowork' || mode === 'code'
+
+  useEffect(() => { setFolderFilter('all') }, [mode])
+
   useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) { /* no-op for now */ }
-    }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
+    if (!showFolderBar) return
+    let cancelled = false
+    listProjects().then((items) => { if (!cancelled) setProjects(items) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [showFolderBar])
 
-  const handleNew = async () => {
-    const conv = await createConversation()
-    upsertConversation(conv)
-    setActiveId(conv.id)
+  useEffect(() => {
+    if (!accountMenuOpen) return
+    const onDoc = (e: MouseEvent) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(e.target as Node))
+        setAccountMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [accountMenuOpen])
+
+  useEffect(() => {
+    if (!renamingId) return
+    renameInputRef.current?.focus()
+    renameInputRef.current?.select()
+  }, [renamingId])
+
+  const goCowork = async (tab: CoworkTab, panel?: 'projects' | 'artifacts' | 'dispatch') => {
+    await openCowork(tab)
+    if (panel) onOpenFeaturePanel?.(panel)
     onClose?.()
   }
 
   const handleSelect = (id: string) => { setActiveId(id); onClose?.() }
+
   const handleDelete = async (id: string) => {
     await deleteConversation(id).catch(() => {})
-    removeConversation(id)
+    removeFromList(mode, id)
   }
 
-  const sorted = useMemo(() =>
-    [...conversations].sort((a, b) =>
+  const handleStartRename = (conv: ConversationSummary) => {
+    setRenamingId(conv.id)
+    setRenameDraft(conv.title || 'New chat')
+  }
+
+  const handleCommitRename = async () => {
+    if (!renamingId) return
+    const title = renameDraft.trim()
+    setRenamingId(null)
+    if (!title) return
+    try {
+      const updated = await updateConversation(renamingId, { title })
+      upsertInList(updated)
+    } catch { /* ignore */ }
+  }
+
+  const handleMoveToFolder = async (convId: string, projectId: string | null) => {
+    try {
+      const updated = await updateConversation(convId, { projectId })
+      upsertInList(updated)
+    } catch { /* ignore */ }
+  }
+
+  const handleNewFolder = async () => {
+    const name = window.prompt('Folder name')
+    if (!name?.trim()) return
+    try {
+      const p = await createProject({ name: name.trim() })
+      setProjects((prev) => [...prev, p])
+      setFolderFilter(p.id)
+    } catch { /* ignore */ }
+  }
+
+  const sorted = useMemo(
+    () => [...conversations].sort((a, b) =>
       new Date(b.lastMessageAt ?? b.updatedAt).getTime() -
       new Date(a.lastMessageAt ?? a.updatedAt).getTime()
-    ), [conversations])
+    ),
+    [conversations],
+  )
 
   const filtered = useMemo(() => {
     if (!search.trim()) return sorted
@@ -129,265 +194,383 @@ export function Sidebar({ onClose, onSettings }: SidebarProps) {
     return sorted.filter((c) => (c.title || '').toLowerCase().includes(q))
   }, [sorted, search])
 
-  const grouped = useMemo(() => groupByDate(filtered), [filtered])
+  const folderFiltered = useMemo(() => {
+    if (!showFolderBar || folderFilter === 'all') return filtered
+    if (folderFilter === 'unfiled') return filtered.filter((c) => !c.projectId)
+    return filtered.filter((c) => c.projectId === folderFilter)
+  }, [showFolderBar, folderFilter, filtered])
+
+  const grouped = useMemo(() => groupByDate(folderFiltered), [folderFiltered])
   const initials = ((user?.displayName ?? user?.email) || '?').slice(0, 1).toUpperCase()
   const displayName = user?.displayName ?? user?.email?.split('@')[0] ?? 'User'
+  const tierLabel = user?.role === 'admin' ? 'Pro' : 'Member'
+
+  const folderChip = (id: FolderFilter, label: string) => {
+    const active = folderFilter === id
+    return (
+      <button
+        type="button"
+        key={String(id)}
+        onClick={() => setFolderFilter(id)}
+        className="w-full text-left text-[12px] px-2.5 py-1.5 rounded-lg truncate transition-colors"
+        style={{
+          background: active ? 'var(--color-surface-active)' : 'transparent',
+          color: active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+        }}
+      >
+        {label}
+      </button>
+    )
+  }
 
   return (
-    <aside
-      className="w-[280px] shrink-0 flex flex-col overflow-hidden h-full"
-      style={{ background: 'var(--color-sidebar)' }}
-    >
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between px-4 pt-5 pb-4">
-        <div className="flex items-center gap-2.5">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path d="M10 2L17 6V14L10 18L3 14V6L10 2Z" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinejoin="round"/>
-            <circle cx="10" cy="10" r="2.5" fill="var(--color-accent)"/>
-          </svg>
-          <span
-            className="text-[15px] font-semibold tracking-tight"
-            style={{ color: 'var(--color-text-primary)' }}
-          >
-            Lumen
-          </span>
-        </div>
-        <button
-          onClick={handleNew}
-          className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
-          style={{ color: 'var(--color-text-muted)' }}
-          onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-text-primary)'; e.currentTarget.style.background = 'var(--color-surface-hover)' }}
-          onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-muted)'; e.currentTarget.style.background = 'transparent' }}
-          title="New chat"
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-            <line x1="7" y1="1" x2="7" y2="13"/>
-            <line x1="1" y1="7" x2="13" y2="7"/>
-          </svg>
-        </button>
-      </div>
-
-      {/* ── Nav tabs ── */}
-      <div
-        className="px-3 pb-2 border-b"
-        style={{ borderColor: 'var(--color-border)' }}
+    <div className="h-full min-h-0 w-full flex flex-col min-w-0">
+      <aside
+        className="flex-1 flex flex-col min-h-0 rounded-2xl border overflow-hidden shadow-[0_8px_36px_rgba(0,0,0,0.42)]"
+        style={{
+          background: 'var(--color-sidebar)',
+          borderColor: 'color-mix(in srgb, var(--color-border) 70%, transparent)',
+        }}
       >
-        <div className="flex gap-0.5">
-          {NAV_ITEMS.map((item) => {
-            const isActive = activeNav === item.id
-            const isLive = item.id === 'chats'
-            return (
-              <button
-                key={item.id}
-                onClick={() => { if (isLive) setActiveNav(item.id) }}
-                title={item.label}
-                disabled={!isLive}
-                className="flex-1 flex flex-col items-center gap-1 py-2 rounded-lg transition-all"
-                style={{
-                  color: isActive
-                    ? 'var(--color-accent)'
-                    : !isLive
-                    ? 'var(--color-text-muted)'
-                    : 'var(--color-text-secondary)',
-                  background: isActive
-                    ? `color-mix(in srgb, var(--color-accent) 10%, transparent)`
-                    : 'transparent',
-                  opacity: !isLive ? 0.45 : 1,
-                  cursor: !isLive ? 'default' : 'pointer',
-                }}
-              >
-                {item.icon}
-                <span className="text-[9.5px] font-medium leading-none">{item.label}</span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* ── Content area ── */}
-      {activeNav === 'chats' ? (
-        <>
-          {/* Search */}
-          <div className="px-3 py-2.5">
-            <div
-              className="flex items-center gap-2 px-3 py-2 rounded-xl border"
-              style={{
-                background: 'var(--color-surface)',
-                borderColor: 'var(--color-border)',
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 15 15" fill="none" style={{ color: 'var(--color-text-muted)', flexShrink: 0 }}>
-                <path d="M10 6.5a3.5 3.5 0 11-7 0 3.5 3.5 0 017 0zm-.7 3.507l2.846 2.847-.848.848L8.454 10.35A4.5 4.5 0 1110 6.5a4.48 4.48 0 01-.7 2.343" fill="currentColor" fillRule="evenodd" clipRule="evenodd"/>
-              </svg>
-              <input
-                type="text"
-                placeholder="Search…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 bg-transparent text-[13px] outline-none"
-                style={{
-                  color: 'var(--color-text-primary)',
-                  // @ts-ignore
-                  '::placeholder': { color: 'var(--color-text-muted)' },
-                }}
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  style={{ color: 'var(--color-text-muted)' }}
-                >
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                    <line x1="1" y1="1" x2="9" y2="9"/>
-                    <line x1="9" y1="1" x2="1" y2="9"/>
-                  </svg>
-                </button>
-              )}
-            </div>
+        {toolbarSlot && (
+          <div className="px-2 pt-2 pb-1 shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
+            {toolbarSlot}
           </div>
+        )}
 
-          {/* Conversation list */}
-          <div className="flex-1 overflow-y-auto min-h-0 pb-2">
-            {filtered.length === 0 ? (
-              <p
-                className="px-5 py-6 text-[13px]"
-                style={{ color: 'var(--color-text-muted)' }}
-              >
-                {search ? `No results for "${search}"` : 'No conversations yet.'}
-              </p>
-            ) : (
-              grouped.map((group) => (
-                <div key={group.label} className="mb-1">
-                  <p
-                    className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest"
-                    style={{ color: 'var(--color-text-muted)' }}
-                  >
-                    {group.label}
-                  </p>
-                  {group.items.map((conv) => (
-                    <div
-                      key={conv.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleSelect(conv.id)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSelect(conv.id)}
-                      className="group relative flex items-center mx-2 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-150 select-none"
-                      style={{
-                        background: conv.id === activeId ? 'var(--color-surface-active)' : 'transparent',
-                        color: conv.id === activeId ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                      }}
-                      onMouseEnter={e => {
-                        if (conv.id !== activeId) {
-                          e.currentTarget.style.background = 'var(--color-surface)'
-                          e.currentTarget.style.color = 'var(--color-text-primary)'
-                        }
-                      }}
-                      onMouseLeave={e => {
-                        if (conv.id !== activeId) {
-                          e.currentTarget.style.background = 'transparent'
-                          e.currentTarget.style.color = 'var(--color-text-secondary)'
-                        }
-                      }}
-                    >
-                      <p className="flex-1 text-[13px] truncate leading-snug pr-5">
-                        {conv.title || 'New Conversation'}
-                      </p>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDelete(conv.id) }}
-                        title="Delete"
-                        className="absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity
-                                   w-6 h-6 flex items-center justify-center rounded-lg"
-                        style={{ color: 'var(--color-text-muted)' }}
-                        onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-error)'; e.currentTarget.style.background = `color-mix(in srgb, var(--color-error) 10%, transparent)` }}
-                        onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-muted)'; e.currentTarget.style.background = 'transparent' }}
-                      >
-                        <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                          <line x1="1" y1="1" x2="8" y2="8"/>
-                          <line x1="8" y1="1" x2="1" y2="8"/>
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ))
-            )}
-          </div>
-        </>
-      ) : (
-        /* Coming soon pane for other nav sections */
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6">
-          <div
-            className="w-12 h-12 rounded-2xl flex items-center justify-center"
-            style={{ background: `color-mix(in srgb, var(--color-accent) 12%, transparent)` }}
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="8" x2="12" y2="12"/>
-              <line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-          </div>
-          <p className="text-[14px] font-semibold text-center" style={{ color: 'var(--color-text-primary)' }}>
-            Coming soon
-          </p>
-          <p className="text-[12.5px] text-center" style={{ color: 'var(--color-text-muted)' }}>
-            {NAV_ITEMS.find(n => n.id === activeNav)?.label} will be available in a future update.
-          </p>
-        </div>
-      )}
-
-      {/* ── Footer ── */}
-      <div
-        className="border-t shrink-0"
-        style={{ borderColor: 'var(--color-border)' }}
-        ref={menuRef}
-      >
-        <div className="flex items-center gap-2 px-3 py-2.5">
-          {/* User button */}
+        <div className="px-2.5 pt-2 pb-1 shrink-0">
           <button
-            className="flex-1 flex items-center gap-3 px-2 py-2 rounded-xl transition-colors min-w-0"
-            style={{ color: 'var(--color-text-primary)' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-hover)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            onClick={onSettings}
-            title="Settings"
+            type="button"
+            aria-label="New conversation"
+            onClick={() => { onNewChat?.(); onClose?.() }}
+            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-left text-[13px] font-medium transition-colors duration-150 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
           >
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-              style={{
-                background: `color-mix(in srgb, var(--color-accent) 20%, transparent)`,
-                border: `1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)`,
-              }}
-            >
-              <span
-                className="text-[12px] font-bold"
+            <span className="shrink-0 w-4 h-4 flex items-center justify-center opacity-80">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                <line x1="7" y1="1" x2="7" y2="13" />
+                <line x1="1" y1="7" x2="13" y2="7" />
+              </svg>
+            </span>
+            New chat
+          </button>
+        </div>
+
+        <div className="px-2.5 pb-2 flex flex-col gap-0.5 shrink-0">
+          <NavRow
+            label="Projects"
+            onClick={() => void goCowork('projects', 'projects')}
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              </svg>
+            }
+          />
+          <NavRow
+            label="Artifacts"
+            onClick={() => void goCowork('artifacts', 'artifacts')}
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <rect x="2" y="7" width="20" height="14" rx="2" />
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+              </svg>
+            }
+          />
+          <NavRow
+            label="Customize"
+            onClick={() => { onSettings?.(); onClose?.() }}
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            }
+          />
+          <details className="group rounded-lg">
+            <summary className="list-none flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-left text-[13px] cursor-pointer text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] [&::-webkit-details-marker]:hidden">
+              <span className="shrink-0 w-4 h-4 flex items-center justify-center opacity-80" aria-hidden>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                  <circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" />
+                </svg>
+              </span>
+              <span className="flex-1">More</span>
+              <span className="text-[var(--color-text-muted)] text-[10px]">▾</span>
+            </summary>
+            <div className="pb-1 pt-0.5">
+              <NavRow
+                label="Dispatch"
+                onClick={() => void goCowork('dispatch', 'dispatch')}
+                badge="Beta"
+                icon={
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                }
+              />
+            </div>
+          </details>
+        </div>
+
+        <div className="mx-3 my-1 shrink-0" style={{ height: '1px', background: 'var(--color-border)' }} />
+
+        <div className="px-4 pt-3 pb-1">
+          <p className="text-[11px] font-semibold tracking-wide mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
+            Pinned
+          </p>
+          <div
+            className="rounded-xl flex items-center justify-center text-[11px] px-2 py-4 min-h-[52px]"
+            style={{
+              border: '1px dashed var(--color-border)',
+              color: 'var(--color-text-muted)',
+              background: 'color-mix(in srgb, var(--color-surface) 50%, transparent)',
+            }}
+          >
+            Drag to pin
+          </div>
+        </div>
+
+        {showFolderBar && (
+          <div className="px-3 pt-2 pb-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>
+                Folders
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleNewFolder()}
+                className="text-[11px] font-medium px-2 py-0.5 rounded-md transition-colors"
                 style={{ color: 'var(--color-accent)' }}
               >
-                {initials}
-              </span>
+                + New
+              </button>
             </div>
-            <span
-              className="flex-1 text-[13px] font-medium truncate text-left"
-              style={{ color: 'var(--color-text-primary)' }}
-            >
-              {displayName}
-            </span>
-          </button>
+            <div className="flex flex-col gap-0.5 max-h-[140px] overflow-y-auto">
+              {folderChip('all', 'All chats')}
+              {folderChip('unfiled', 'Unfiled')}
+              {projects.map((p) => folderChip(p.id, p.name))}
+            </div>
+          </div>
+        )}
 
-          {/* Settings gear button */}
-          <button
-            onClick={onSettings}
-            title="Settings"
-            className="w-8 h-8 flex items-center justify-center rounded-xl transition-colors shrink-0"
-            style={{ color: 'var(--color-text-muted)' }}
-            onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-text-primary)'; e.currentTarget.style.background = 'var(--color-surface-hover)' }}
-            onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-muted)'; e.currentTarget.style.background = 'transparent' }}
+        <div className="px-3 py-2.5 border-b" style={{ borderColor: 'var(--color-border)' }}>
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border"
+            style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            <svg width="12" height="12" viewBox="0 0 15 15" fill="none" style={{ color: 'var(--color-text-muted)', flexShrink: 0 }}>
+              <path d="M10 6.5a3.5 3.5 0 11-7 0 3.5 3.5 0 017 0zm-.7 3.507l2.846 2.847-.848.848L8.454 10.35A4.5 4.5 0 1110 6.5a4.48 4.48 0 01-.7 2.343" fill="currentColor" fillRule="evenodd" clipRule="evenodd" />
             </svg>
-          </button>
+            <input
+              type="text"
+              placeholder="Search…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="sidebar-search flex-1 bg-transparent text-[13px] outline-none text-[var(--color-text-primary)]"
+            />
+            {search && (
+              <button type="button" aria-label="Clear search" onClick={() => setSearch('')} className="text-[var(--color-text-muted)]">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <line x1="1" y1="1" x2="9" y2="9" /><line x1="9" y1="1" x2="1" y2="9" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
-      </div>
-    </aside>
+
+        <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
+          Recents
+        </p>
+
+        <div className="flex-1 overflow-y-auto min-h-0 pb-2">
+          {folderFiltered.length === 0 ? (
+            <p className="px-5 py-4 text-[13px]" style={{ color: 'var(--color-text-muted)' }}>
+              {search ? `No results for "${search}"` : 'No conversations yet.'}
+            </p>
+          ) : (
+            grouped.map((group) => (
+              <div key={group.label} className="mb-1">
+                <p className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>
+                  {group.label}
+                </p>
+                {group.items.map((conv) => (
+                  <div key={conv.id} className="group relative mx-2">
+                    {renamingId === conv.id ? (
+                      <div className="px-3 py-2 rounded-xl" style={{ background: 'var(--color-surface-active)' }}>
+                        <input
+                          ref={renameInputRef}
+                          value={renameDraft}
+                          onChange={(e) => setRenameDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') void handleCommitRename()
+                            if (e.key === 'Escape') setRenamingId(null)
+                          }}
+                          onBlur={() => void handleCommitRename()}
+                          className="w-full bg-transparent text-[13px] outline-none rounded-md px-1 py-0.5"
+                          style={{ color: 'var(--color-text-primary)', border: '1px solid var(--color-border)' }}
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleSelect(conv.id)}
+                          className={`flex w-full items-center px-3 py-2.5 rounded-xl transition-all duration-150 select-none text-left pr-[4.75rem] ${
+                            conv.id === activeId
+                              ? 'bg-[var(--color-surface-active)] text-[var(--color-text-primary)]'
+                              : 'bg-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-primary)]'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] truncate leading-snug">{conv.title || 'New chat'}</p>
+                            {showFolderBar && conv.projectId && (
+                              <p className="text-[10px] truncate mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                                {projects.find((p) => p.id === conv.projectId)?.name ?? 'Folder'}
+                              </p>
+                            )}
+                          </div>
+                        </button>
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            type="button"
+                            onClick={() => handleStartRename(conv)}
+                            title="Rename"
+                            aria-label="Rename conversation"
+                            className="w-6 h-6 flex items-center justify-center rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[color-mix(in_srgb,var(--color-accent)_10%,transparent)]"
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                              <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                            </svg>
+                          </button>
+                          {showFolderBar && (
+                            <details className="relative">
+                              <summary className="list-none w-6 h-6 flex items-center justify-center rounded-lg cursor-pointer text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] [&::-webkit-details-marker]:hidden">
+                                <span className="text-[14px] leading-none pb-0.5">⋯</span>
+                              </summary>
+                              <div
+                                className="absolute right-0 bottom-full mb-1 min-w-[140px] py-1 rounded-lg z-30 shadow-lg"
+                                style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}
+                              >
+                                <p className="px-2.5 py-1 text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Move to</p>
+                                <button
+                                  type="button"
+                                  className="w-full text-left text-[12px] px-2.5 py-1.5 hover:bg-[var(--color-surface-hover)]"
+                                  style={{ color: 'var(--color-text-primary)' }}
+                                  onClick={() => { void handleMoveToFolder(conv.id, null); (document.activeElement as HTMLElement | null)?.blur() }}
+                                >
+                                  Unfiled
+                                </button>
+                                {projects.map((p) => (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    className="w-full text-left text-[12px] px-2.5 py-1.5 truncate hover:bg-[var(--color-surface-hover)]"
+                                    style={{ color: 'var(--color-text-primary)' }}
+                                    onClick={() => { void handleMoveToFolder(conv.id, p.id); (document.activeElement as HTMLElement | null)?.blur() }}
+                                  >
+                                    {p.name}
+                                  </button>
+                                ))}
+                              </div>
+                            </details>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => void handleDelete(conv.id)}
+                            title="Delete"
+                            aria-label="Delete conversation"
+                            className="w-6 h-6 flex items-center justify-center rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]"
+                          >
+                            <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                              <line x1="1" y1="1" x2="8" y2="8" /><line x1="8" y1="1" x2="1" y2="8" />
+                            </svg>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="border-t shrink-0 relative" style={{ borderColor: 'var(--color-border)' }}>
+          <div ref={accountMenuRef} className="px-3 py-3.5">
+            {accountMenuOpen && (
+              <div
+                className="absolute bottom-full left-3 right-3 mb-1 rounded-xl z-20 overflow-hidden shadow-lg"
+                style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.45)' }}
+              >
+                <p className="text-[11.5px] px-3 pt-3 pb-2 truncate" style={{ color: 'var(--color-text-muted)' }}>
+                  {user?.email ?? 'Signed in'}
+                </p>
+                <div style={{ borderTop: '1px solid var(--color-border)' }}>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-[13px] transition-colors text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]"
+                    onClick={() => { setAccountMenuOpen(false); onSettings?.(); onClose?.() }}
+                  >
+                    <span className="opacity-80 w-4 h-4 flex items-center justify-center">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+                      </svg>
+                    </span>
+                    Settings
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-[13px] transition-colors text-[var(--color-error)] hover:bg-[color-mix(in_srgb,var(--color-error)_8%,transparent)]"
+                    onClick={async () => {
+                      setAccountMenuOpen(false)
+                      await logout().catch(() => {})
+                      resetSession()
+                      resetWorkspace()
+                      clearAuth()
+                      onClose?.()
+                    }}
+                  >
+                    <span className="opacity-80 w-4 h-4 flex items-center justify-center">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+                      </svg>
+                    </span>
+                    Log out
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className="flex-1 flex items-center gap-2.5 px-2 py-2 rounded-xl transition-colors min-w-0 text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] text-left"
+                onClick={() => setAccountMenuOpen((o) => !o)}
+                title="Account"
+                aria-label="Account menu"
+                aria-expanded={accountMenuOpen}
+              >
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                  style={{
+                    background: 'color-mix(in srgb, var(--color-accent) 20%, transparent)',
+                    border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
+                  }}
+                >
+                  <span className="text-[12px] font-bold" style={{ color: 'var(--color-accent)' }}>{initials}</span>
+                </div>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[13px] font-medium truncate leading-tight" style={{ color: 'var(--color-text-primary)' }}>
+                    {displayName}
+                  </span>
+                  <span className="block text-[11px] text-[var(--color-text-muted)] leading-tight">{tierLabel}</span>
+                </span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-[var(--color-text-muted)]" aria-hidden>
+                  <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
   )
 }

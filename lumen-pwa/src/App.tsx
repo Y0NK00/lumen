@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { useAuthStore } from './stores/authStore'
 import { useAppStore } from './stores/appStore'
-import { apiJSON, listConversations } from './lib/api'
+import { useWorkspaceStore } from './stores/workspaceStore'
+import { apiJSON, listConversationsForWorkspace } from './lib/api'
 import { LoginPage } from './components/LoginPage'
 import { Layout } from './components/Layout'
 import { useVisualViewport } from './hooks/useVisualViewport'
@@ -32,22 +33,34 @@ export default function App() {
   useEffect(() => {
     if (token && !user) {
       tryHydrateUser().then((data) => {
-        if (!data) clearAuth()
+        if (!data) {
+          useAppStore.getState().resetSession()
+          useWorkspaceStore.getState().resetWorkspace()
+          clearAuth()
+        }
       })
     }
   }, []) // eslint-disable-line
 
-  // Load conversations when authenticated
+  // Load Chat workspace when authenticated. Do not clearAuth on failure — older servers without `workspace` caused a false “login broken” loop.
   useEffect(() => {
     if (!token || conversationsLoaded) return
-    listConversations()
+    listConversationsForWorkspace('chat')
       .then((items) => {
+        useWorkspaceStore.getState().setList('chat', items)
         setConversations(items)
         if (items.length > 0) {
           useAppStore.getState().setActiveId(items[0].id)
+          useWorkspaceStore.setState((s) => ({
+            activeConvId: { ...s.activeConvId, chat: items[0].id },
+          }))
         }
       })
-      .catch(() => clearAuth())
+      .catch((e) => {
+        console.error('Failed to load conversations (session kept):', e)
+        useWorkspaceStore.getState().setList('chat', [])
+        setConversations([])
+      })
   }, [token, conversationsLoaded]) // eslint-disable-line
 
   if (!token) return <LoginPage />

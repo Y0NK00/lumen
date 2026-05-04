@@ -3,6 +3,7 @@ import { MessageList } from './MessageList'
 import { InputBox } from './InputBox'
 import { useStream } from '../hooks/useStream'
 import { useAppStore } from '../stores/appStore'
+import { useWorkspaceStore } from '../stores/workspaceStore'
 import { getConversation, updateConversation } from '../lib/api'
 
 function SystemPromptModal({
@@ -16,13 +17,13 @@ function SystemPromptModal({
 }) {
   const [value, setValue] = useState(initial ?? '')
   const [saving, setSaving] = useState(false)
-  const { upsertConversation } = useAppStore()
+  const upsertInList = useWorkspaceStore((s) => s.upsertInList)
 
   const handleSave = async () => {
     setSaving(true)
     try {
       const updated = await updateConversation(convId, { systemPrompt: value.trim() || null })
-      upsertConversation(updated)
+      upsertInList(updated)
       onClose()
     } catch (e) {
       console.error(e)
@@ -106,7 +107,8 @@ export function ChatPane() {
   useEffect(() => {
     if (!activeId) return
     if (messagesByConv[activeId]) return
-    getConversation(activeId).then(({ messages }) => {
+    getConversation(activeId).then(({ conversation, messages }) => {
+      useWorkspaceStore.getState().upsertInList(conversation)
       setMessages(activeId, messages)
     }).catch(console.error)
   }, [activeId, messagesByConv, setMessages])
@@ -116,7 +118,7 @@ export function ChatPane() {
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col h-full min-h-0 w-full min-w-0">
       {/* System prompt indicator bar — only shown when one is set */}
       {activeConv?.systemPrompt && (
         <div
