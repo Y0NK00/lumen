@@ -632,20 +632,20 @@ export function SettingsView({ onClose }: SettingsViewProps) {
       break
     case 'general':
       main = (
-        <div className=”w-full py-7 sm:py-8”>
-          <PaneTitle title=”General” subtitle=”Profile and preferences for Lumen chat.” />
-          <div className=”space-y-6 sm:space-y-7”>
+        <div className="w-full py-7 sm:py-8">
+          <PaneTitle title="General" subtitle="Profile and preferences for Lumen chat." />
+          <div className="space-y-6 sm:space-y-7">
             <div>
-              <div className=”flex items-baseline justify-between mb-2.5”>
-                <label className=”text-[11px] font-medium uppercase tracking-wide” style={{ color: 'var(--color-text-muted)' }}>
+              <div className="flex items-baseline justify-between mb-2.5">
+                <label className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
                   Full name
                 </label>
                 {editName !== (user?.displayName ?? '') && (
                   <button
-                    type=”button”
+                    type="button"
                     onClick={() => void saveName()}
                     disabled={nameSaving || !editName.trim()}
-                    className=”text-[11.5px] font-semibold px-3 py-1 rounded-lg transition-opacity”
+                    className="text-[11.5px] font-semibold px-3 py-1 rounded-lg transition-opacity"
                     style={{
                       background: 'var(--color-accent)',
                       color: '#fff',
@@ -656,11 +656,11 @@ export function SettingsView({ onClose }: SettingsViewProps) {
                   </button>
                 )}
                 {nameSaved && editName === (user?.displayName ?? '') && (
-                  <span className=”text-[11.5px] font-medium” style={{ color: 'var(--color-accent)' }}>Saved ✓</span>
+                  <span className="text-[11.5px] font-medium" style={{ color: 'var(--color-accent)' }}>Saved ✓</span>
                 )}
               </div>
               <input
-                className=”w-full rounded-xl px-5 py-3.5 text-[13px] outline-none leading-snug transition-colors focus:ring-1”
+                className="w-full rounded-xl px-5 py-3.5 text-[13px] outline-none leading-snug transition-colors focus:ring-1"
                 style={{
                   background: 'var(--color-surface)',
                   border: '1px solid var(--color-border)',
@@ -669,16 +669,16 @@ export function SettingsView({ onClose }: SettingsViewProps) {
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') void saveName() }}
-                placeholder=”Your name”
+                placeholder="Your name"
               />
             </div>
             <div>
-              <label className=”text-[11px] font-medium uppercase tracking-wide block mb-2.5” style={{ color: 'var(--color-text-muted)' }}>
+              <label className="text-[11px] font-medium uppercase tracking-wide block mb-2.5" style={{ color: 'var(--color-text-muted)' }}>
                 Email
               </label>
               <input
                 readOnly
-                className=”w-full rounded-xl px-5 py-3.5 text-[13px] outline-none leading-snug”
+                className="w-full rounded-xl px-5 py-3.5 text-[13px] outline-none leading-snug"
                 style={{
                   background: 'color-mix(in srgb, var(--color-surface) 60%, transparent)',
                   border: '1px solid var(--color-border)',
@@ -689,13 +689,13 @@ export function SettingsView({ onClose }: SettingsViewProps) {
               />
             </div>
             <div>
-              <label className=”text-[11px] font-medium uppercase tracking-wide block mb-2.5” style={{ color: 'var(--color-text-muted)' }}>
+              <label className="text-[11px] font-medium uppercase tracking-wide block mb-2.5" style={{ color: 'var(--color-text-muted)' }}>
                 Instructions for Lumen
               </label>
               <textarea
-                placeholder=”Persistent about-me context coming soon — use per-conversation system prompts for now.”
+                placeholder="Persistent about-me context coming soon — use per-conversation system prompts for now."
                 rows={4}
-                className=”w-full rounded-xl px-5 py-4 text-[13px] outline-none resize-none leading-relaxed min-h-[128px]”
+                className="w-full rounded-xl px-5 py-4 text-[13px] outline-none resize-none leading-relaxed min-h-[128px]"
                 style={{
                   background: 'color-mix(in srgb, var(--color-surface) 60%, transparent)',
                   border: '1px solid var(--color-border)',
@@ -1100,54 +1100,11 @@ export function SettingsView({ onClose }: SettingsViewProps) {
           </div>
         </aside>
 
-        {/* Mobile: section dropdown could be added later; for now scroll nav */}
-        <aside
-          className="sm:hidden shrink-0 overflow-x-auto flex gap-1 px-2 py-2 border-b"
-          style={{ borderColor: 'var(--color-border)' }}
-        >
-          {(
-            [
-              'general',
-              'appearance',
-              'account',
-              'capabilities',
-              'connectors',
-              'code',
-              'cowork',
-              'desktopDeveloper',
-            ] as SettingsSection[]
-          ).map((id) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setSection(id)}
-              className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-medium capitalize"
-              style={{
-                background: section === id ? 'var(--color-surface-hover)' : 'transparent',
-                color: section === id ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-              }}
-            >
-              {id.replace('desktop', '').replace('Beta', '')}
-            </button>
-          ))}
-        </aside>
-
-        <main
-          className="flex-1 overflow-y-auto min-h-0 min-w-0 flex flex-col box-border"
-          style={{ background: 'var(--color-background)' }}
-        >
-          {/* Centered content column + wide side gutters (Claude-style). Sign out lives under Account, not the header. */}
-          <div className="flex-1 flex justify-center w-full min-h-0">
-            <div className="w-full max-w-[min(40rem,calc(100%-1.5rem))] sm:max-w-[42rem] px-6 sm:px-12 lg:px-16 xl:px-20 py-8 sm:py-12 lg:py-16">
-              {main}
-            </div>
+        <div className="flex-1 min-w-0 overflow-y-auto">
+          <div className="max-w-2xl mx-auto px-6 sm:px-8">
+            {main}
           </div>
-          <div className="text-center py-10 px-6 shrink-0">
-            <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-              Lumen · Self-hosted assistant
-            </p>
-          </div>
-        </main>
+        </div>
       </div>
     </div>
   )

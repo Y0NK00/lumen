@@ -19,12 +19,12 @@ db.pragma('busy_timeout = 5000');
 
 logger.info({ path: DB_PATH }, 'sqlite connected');
 
-// ── Apply base schema (all statements use IF NOT EXISTS — safe to run every startup) ──
+// ── Apply base schema (all statements use IF NOT EXISTS ─ safe to run every startup) ──
 const schemaPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'schema.sql');
 const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 db.exec(schemaSql);
 
-// ── Incremental migrations (each is idempotent — caught errors mean already applied) ──
+// ── Incremental migrations (each is idempotent ─ caught errors mean already applied) ──
 const migrations: string[] = [
   // v2: add workspace column to conversations
   `ALTER TABLE conversations ADD COLUMN workspace TEXT NOT NULL DEFAULT 'chat'`,
@@ -36,7 +36,7 @@ for (const sql of migrations) {
   try {
     db.exec(sql);
   } catch {
-    // "duplicate column name" or "already exists" — migration already applied, skip
+    // already applied, skip
   }
 }
 

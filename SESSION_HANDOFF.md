@@ -1,107 +1,104 @@
-# Session handoff — Desktop shell & Claude-style layout
+# Lumen Session Handoff — May 4 2026
 
-**Last updated:** 2026-05-03  
-**Workspace:** `C:\Dev\tower-ai-app`  
-**Focus:** `lumen-pwa` — Electron/desktop header: Chat / Cowork / Code + New chat placement vs Claude reference.
+## What was done this session
 
----
+### Layout restructure (all working, TSC clean)
+- **Toolbar moved into sidebar top** — `TopCommandBar` now renders as `toolbarSlot` inside the desktop Sidebar, not in the main header. Includes moon icon (theme toggle placeholder), sidebar toggle, history nav.
+- **Workspace tabs centered in main header** — `DesktopMainHeader` restructured to single row: [sidebar toggle when collapsed] [drag] [Chat/Cowork/Code tabs centered] [drag] [window controls]. Old 2-row layout removed.
+- **New Chat button above Projects** in the sidebar nav section.
+- **Dispatch promoted from "More" menu** — removed the `<details>/<summary>` collapsible entirely; Dispatch now appears as a direct nav row with Beta badge.
+- **Sidebar section spacing increased** — added divider + more padding between nav items / Pinned / Search / Recents sections.
 
-## Goal (user intent)
+### Database migration fix
+- `lumen-server/src/db/connection.ts` — now auto-applies `schema.sql` on startup (idempotent) + runs incremental migrations array that adds `workspace TEXT NOT NULL DEFAULT 'chat'` column and its index. Silently skips already-applied migrations.
+- Fixed 500 errors on `GET /api/conversations?workspace=chat`.
 
-Match **Claude desktop** behavior for the **main column chrome**:
+### Settings — General page (now editable)
+- **Full Name field is now editable** — edit in place, hit Enter or Save button. Calls `PATCH /api/auth/me` on the server.
+- Email stays read-only (auth identity, can't change without re-verification).
+- Instructions field visually dimmed — placeholder for future persistent about-me storage.
 
-1. **Chat / Cowork / Code** and **+ New chat** live in the **main area**, **under** the top toolbar (hamburger, sidebar toggle, search, back/forward), **left-aligned** with that toolbar — not centered in the pane.
-2. Controls should read as **integrated app chrome**, not a **small floating card** in empty space.
+### Server — new endpoint
+- `PATCH /api/auth/me` in `lumen-server/src/routes/auth.ts` — lets a logged-in user update their own `displayName`. Validates via Zod, writes to SQLite, returns updated user.
+- `setUser()` added to `authStore.ts` so the name updates in the UI immediately without a page reload.
 
----
+### Themes — 3 new additions
+Added to `lumen-pwa/src/stores/themeStore.ts`:
+- **Claude** — warm sand background, amber/copper accent (`#d4915a`). Matches claude.ai aesthetic.
+- **Dracula** — classic Dracula palette, purple accent (`#bd93f9`).
+- **Nord** — arctic blue tones, cyan accent (`#88c0d0`).
 
-## What was wrong (root causes)
-
-| Problem | Cause in code |
-|--------|----------------|
-| Block sat in the **center** of the main pane | `DesktopMainHeader` row 2 used a **3-column grid** with the workspace UI in the **center** column (`justify-center`). |
-| Block looked like a **detached “island”** | `Layout.tsx` wrapped tabs + New chat in a **`w-fit` + `rounded-2xl` + border + drop-shadow** “card” — visually separate from the toolbar and from the empty `ChatPane` below. |
-| **Duplicate New chat** | Sidebar had its own **New chat** row while the main header also had **+ New chat** (Claude stacks it only under the mode tabs in the main column). |
-
-**Left-aligning alone** fixed centering but **not** the “floating widget” look — that required **removing the outer card** and **merging** the header rows visually.
-
----
-
-## What was implemented (files & behavior)
-
-### `lumen-pwa/src/components/WindowChrome.tsx`
-
-- **`DesktopMainHeader`**
-  - **Row 1:** `TopCommandBar` (left) + drag region + `WindowControlButtons`.
-  - **Row 2:** **`flex justify-start`** + `px-2` — workspace panel is **flush left**, same horizontal padding as row 1 (no grid centering).
-  - Removed **border-t** between row 1 and row 2 so the header reads as **one continuous block** instead of “toolbar | divider | panel.”
-
-### `lumen-pwa/src/components/Layout.tsx`
-
-- **`workspacePanel` prop** to `DesktopMainHeader`:
-  - Removed outer **`rounded-2xl` / border / heavy shadow** wrapper.
-  - Replaced with a simple **`flex flex-col gap-2 w-full max-w-[420px]`** stack.
-  - **`WorkspaceTabs`** (`variant="main"`, `inCard`) — segment control keeps its own surface/inset styling.
-  - **+ New chat** button: **`var(--color-surface)`** background so it reads as a row, not nested inside a second frame.
-
-### `lumen-pwa/src/components/Sidebar.tsx`
-
-- Removed the top **NavRow “New chat”** (single entry point is now the main-column button).
-- Removed dead code: **`newChatProjectId`**, **`handleNew`**, and unused **`createConversation`** import.
-
-### Build
-
-- **`npm run build`** in `lumen-pwa` succeeds (`tsc && vite build`).
+### Connectors page improvements
+- Each connector now shows an **OAuth** badge.
+- Env vars listed as inline `<code>` tags instead of a text sentence (e.g. `GOOGLE_CLIENT_ID · GOOGLE_CLIENT_SECRET`).
+- Button changed from "Unavailable" → "Needs setup" to be less discouraging.
 
 ---
 
-## What may still feel “off” vs Claude (not bugs — design deltas)
+## Pending — NOT done yet
 
-These are **optional** follow-ups if pixel parity matters:
+### Git commit blocked
+The `.git/index.lock` file on the Windows NTFS mount can't be deleted from the Linux sandbox. Will needs to run from his Windows terminal:
+```
+del C:\Dev\tower-ai-app\.git\index.lock
+cd C:\Dev\tower-ai-app
+git add -A
+git commit -m "feat: layout restructure, new themes, editable profile, workspace migration"
+git push
+```
 
-- **Width:** Workspace stack is **`max-w-[420px]`** — Claude may use a different max width or full-bleed segment bar.
-- **Density / typography:** Tab labels, padding, and **selected** tab styling may still differ from Claude.
-- **Empty main area:** With no messages, **`ChatPane`** is mostly empty — the header stack will still look small relative to the window; that is expected unless empty-state or layout changes fill the column.
-- **Sidebar vs reference:** Sidebar still shows **Projects / Artifacts / Customize / More** — broader product parity is separate from header alignment.
+### Unraid server hasn't been updated
+The deployed server still runs the old code. After committing, Will needs to SSH into Unraid and:
+```bash
+cd /path/to/lumen-server
+git pull
+npm run build
+pm2 restart lumen-server   # or however it's managed
+```
+The `PATCH /api/auth/me` endpoint and workspace migration only take effect once the server is rebuilt.
+
+### Edit tool truncation problem (IMPORTANT for next session)
+**Never use the Edit tool on large files on this NTFS-mounted repo.** The Edit tool silently truncates files when writing to Windows NTFS from the Linux sandbox. Every file corrupted this session (Sidebar.tsx, SettingsView.tsx, themeStore.ts, authStore.ts, api.ts, auth.ts, connection.ts) had to be repaired with python3.
+
+**Safe pattern for edits:**
+```python
+python3 - << 'PY'
+path = '/sessions/.../mnt/tower-ai-app/...'
+data = open(path, 'r', encoding='utf-8').read()
+data = data.replace('old_string', 'new_string')
+open(path, 'w', encoding='utf-8').write(data)
+PY
+```
+For new files, use `cat > file << 'HEREDOC'` in bash.
+
+### Smart quotes in context summaries
+When the conversation is summarized and resumed, the summary sometimes contains Unicode smart quotes (`"` `"`) that get baked into code via the Edit tool. Fix with:
+```python
+data = data.replace('“', '"').replace('”', '"')
+```
+Or the bytes version: `b'\xe2\x80\x9c'` → `b'"'`, `b'\xe2\x80\x9d'` → `b'"'`.
 
 ---
 
-## What’s left on the build (broader backlog)
-
-### PWA / UI (see also `UI_HANDOFF.md`)
-
-- Replace **inline `onMouseEnter` / `onMouseLeave`** hover hacks with **Tailwind + CSS variables** where listed.
-- **Hardcoded accent hex** in SVGs → `var(--color-accent)`.
-- **Sidebar search** placeholder (class-based), duplicate settings control, **aria-labels**, **`div[role=button]` → `<button>`**, etc.
-
-### Product / server (see `LUMEN_BUILD_PLAN.md`)
-
-Examples still accurate at high level: **conversation search** (UI present, not fully wired), **projects/artifacts** depth, **scheduled tasks**, **attachments**, **vault**, etc. — confirm against current `lumen-server` routes when picking up backend work.
-
-### Jarvis / Phase 4
-
-See **`AI_HANDOFF-5-2.md`** — next architectural step called out there: **pywebview** (or similar) desktop shell for HUD.
+## Active file inventory (all TSC clean)
+| File | What changed |
+|------|-------------|
+| `lumen-pwa/src/components/Sidebar.tsx` | Full rewrite — new props, toolbar slot, Dispatch direct nav, spacing |
+| `lumen-pwa/src/components/Layout.tsx` | Toolbar in sidebar slot, centered tabs in header |
+| `lumen-pwa/src/components/WindowChrome.tsx` | Single-row DesktopMainHeader |
+| `lumen-pwa/src/components/SettingsView.tsx` | Editable name, connector badges, 3 new theme slots wired |
+| `lumen-pwa/src/stores/themeStore.ts` | Claude, Dracula, Nord themes added |
+| `lumen-pwa/src/stores/authStore.ts` | `setUser()` action added |
+| `lumen-pwa/src/lib/api.ts` | `updateProfile()` function added |
+| `lumen-server/src/routes/auth.ts` | `PATCH /api/auth/me` endpoint |
+| `lumen-server/src/db/connection.ts` | Auto schema + workspace migration |
+| `lumen-server/src/db/schema.sql` | `workspace` column, clean IF NOT EXISTS indexes |
 
 ---
 
-## Quick pointers for the next session
-
-| Topic | Primary files |
-|------|----------------|
-| Desktop header layout | `lumen-pwa/src/components/WindowChrome.tsx`, `Layout.tsx` |
-| Workspace modes & tabs | `lumen-pwa/src/components/WorkspaceTabs.tsx`, `stores/workspaceStore.ts` |
-| Command bar / hamburger | `lumen-pwa/src/components/TopCommandBar.tsx` |
-| Main chat body | `lumen-pwa/src/components/ChatPane.tsx` |
-
-**Dev:** from repo root, `npm run dev` (or `lumen-pwa`: `npm run dev`); Electron if using `electron:dev` per package scripts.
-
----
-
-## Related docs in this repo
-
-| File | Purpose |
-|------|---------|
-| `AI_HANDOFF-5-2.md` | Full project orientation, deploy, API, tripwires, Jarvis |
-| `UI_HANDOFF.md` | PWA UI cleanup checklist (hover, a11y, sidebar) |
-| `LUMEN_BUILD_PLAN.md` | Long-term build status and startup prompt block |
-| `CHANGELOG.md` | Dated change log entries |
+## Next session priorities (Will's list)
+1. Wire up OAuth connectors (set `GOOGLE_CLIENT_ID` etc on Unraid, test full flow)
+2. Make Instructions field in Settings actually persist to `settings_json` in DB
+3. Cowork workspace sidebar items (New Task, Scheduled, Live Artifacts — these live in a different component than Chat sidebar)
+4. UI polish pass — remaining hardcoded hex colors, placeholder CSS, inline hover JS
+5. Consider adding more API-key-based connectors (OpenAI, etc.)

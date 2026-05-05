@@ -255,7 +255,7 @@ export function Sidebar({ onClose, onSettings, onOpenFeaturePanel, toolbarSlot, 
           </button>
         </div>
 
-        <div className="px-2.5 pb-2 flex flex-col gap-0.5 shrink-0">
+        <div className="px-2.5 pb-3 flex flex-col gap-1 shrink-0">
           <NavRow
             label="Projects"
             onClick={() => void goCowork('projects', 'projects')}
@@ -285,35 +285,22 @@ export function Sidebar({ onClose, onSettings, onOpenFeaturePanel, toolbarSlot, 
               </svg>
             }
           />
-          <details className="group rounded-lg">
-            <summary className="list-none flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-left text-[13px] cursor-pointer text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] [&::-webkit-details-marker]:hidden">
-              <span className="shrink-0 w-4 h-4 flex items-center justify-center opacity-80" aria-hidden>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                  <circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" />
-                </svg>
-              </span>
-              <span className="flex-1">More</span>
-              <span className="text-[var(--color-text-muted)] text-[10px]">▾</span>
-            </summary>
-            <div className="pb-1 pt-0.5">
-              <NavRow
-                label="Dispatch"
-                onClick={() => void goCowork('dispatch', 'dispatch')}
-                badge="Beta"
-                icon={
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                  </svg>
-                }
-              />
-            </div>
-          </details>
+          <NavRow
+            label="Dispatch"
+            onClick={() => void goCowork('dispatch', 'dispatch')}
+            badge="Beta"
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+            }
+          />
         </div>
 
-        <div className="mx-3 my-1 shrink-0" style={{ height: '1px', background: 'var(--color-border)' }} />
+        <div className="mx-3 mt-2 mb-2 shrink-0" style={{ height: '1px', background: 'var(--color-border)' }} />
 
-        <div className="px-4 pt-3 pb-1">
-          <p className="text-[11px] font-semibold tracking-wide mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="px-4 pt-3 pb-3">
+          <p className="text-[11px] font-semibold tracking-wide mb-2" style={{ color: 'var(--color-text-muted)' }}>
             Pinned
           </p>
           <div
@@ -351,7 +338,7 @@ export function Sidebar({ onClose, onSettings, onOpenFeaturePanel, toolbarSlot, 
           </div>
         )}
 
-        <div className="px-3 py-2.5 border-b" style={{ borderColor: 'var(--color-border)' }}>
+        <div className="px-3 py-3 border-b" style={{ borderColor: 'var(--color-border)' }}>
           <div
             className="flex items-center gap-2 px-3 py-2 rounded-xl border"
             style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
@@ -376,7 +363,7 @@ export function Sidebar({ onClose, onSettings, onOpenFeaturePanel, toolbarSlot, 
           </div>
         </div>
 
-        <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
+        <p className="px-4 pt-4 pb-1.5 text-[11px] font-semibold tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
           Recents
         </p>
 
