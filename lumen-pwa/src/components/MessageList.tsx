@@ -6,9 +6,10 @@ import { useAuthStore } from '../stores/authStore'
 import { FileCard } from './FileCard'
 
 function messageText(msg: DisplayMessage): string {
-  if ('isStreaming' in msg && msg.isStreaming) return msg.content
-  const sm = msg as { content: Array<{ type: string; text?: string }> }
-  return sm.content
+  const c = (msg as { content: unknown }).content
+  if (typeof c === 'string') return c
+  if (!Array.isArray(c)) return ''
+  return (c as Array<{ type: string; text?: string }>)
     .filter((b) => b.type === 'text')
     .map((b) => b.text ?? '')
     .join('')
