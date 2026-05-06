@@ -99,9 +99,10 @@ export async function messageRoutes(app: FastifyInstance) {
         .map((m) => ({
           role: m.role as 'user' | 'assistant',
           content: m.content
-            .filter((b) => b.type === 'text')
+            .filter((b) => b.type === 'text' && Boolean((b as { type: string; text: string }).text.trim()))
             .map((b) => ({ type: 'text' as const, text: (b as { type: string; text: string }).text })),
-        }));
+        }))
+        .filter((m) => m.content.length > 0);
 
       // Build system prompt — inject memories if any exist
       const memories = listMemories(userId);
@@ -195,6 +196,9 @@ export async function messageRoutes(app: FastifyInstance) {
           }).catch(() => {});
         }
 
+        if (injectedText) {
+          sendEvent('text_delta', { delta: injectedText });
+        }
         sendEvent('done', { messageId: assistantMessage.id, finishReason: result.finishReason });
         logger.info({ userId, conversationId, model, costUsd: result.costUsd }, 'message.streamed');
       } catch (err) {
