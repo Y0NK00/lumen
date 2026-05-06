@@ -31,6 +31,7 @@ import { memoryRoutes } from './routes/memory.js';
 import { projectRoutes } from './routes/projects.js';
 import { artifactRoutes } from './routes/artifacts.js';
 import { scheduledTaskRoutes } from './routes/scheduledTasks.js';
+import { fileRoutes } from './routes/files.js';
 import { startExtensionBridge } from './extensionBridge.js';
 
 async function main() {
@@ -58,6 +59,7 @@ async function main() {
   await app.register(projectRoutes);
   await app.register(artifactRoutes);
   await app.register(scheduledTaskRoutes);
+  await app.register(fileRoutes);
 
   // ── Static PWA (production only) ────────────────────────────────────────────
   // In dev the Vite dev server handles this; in production the built PWA lives

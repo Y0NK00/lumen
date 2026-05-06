@@ -3,6 +3,7 @@ import { sseStream } from '../lib/stream'
 import { useAppStore } from '../stores/appStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { createConversation, getConversation } from '../lib/api'
+import { useFilesStore } from '../stores/filesStore'
 
 export function useStream() {
   const [isStreaming, setIsStreaming] = useState(false)
@@ -94,6 +95,28 @@ export function useStream() {
           getConversation(convId).then(({ conversation }) => {
             useWorkspaceStore.getState().upsertInList(conversation)
           }).catch(() => {})
+        } else if (event === 'file_event') {
+          const file = d.file as {
+            id: string
+            userId: string
+            projectId: string | null
+            conversationId: string | null
+            name: string
+            language: string
+            sizeBytes: number
+            pinned: boolean
+            createdAt: string
+            updatedAt: string
+          }
+          useFilesStore.getState().updateStub(file)
+          store().appendMessage(convId, {
+            id: crypto.randomUUID(),
+            conversationId: convId,
+            role: 'assistant',
+            content: [{ type: 'file_event', file, action: d.type as string }],
+            finishReason: null,
+            createdAt: new Date().toISOString(),
+          })
         } else if (event === 'error') {
           if (flushTimer) { clearTimeout(flushTimer); flushTimer = null }
           if (assistantMsgId) {

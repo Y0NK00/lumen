@@ -36,10 +36,43 @@ export interface StreamResult {
 export async function streamAnthropicMessage(params: StreamParams): Promise<StreamResult> {
   const { conversationId, model, systemPrompt, messages, onEvent } = params;
 
+  const tools: Anthropic.Tool[] = [
+    {
+      name: 'create_file',
+      description: 'Create a new file with the given name, language, and content. Use this when the user asks you to write, create, or generate a file, script, or document.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Filename including extension (e.g. backup.sh, notes.md)' },
+          language: {
+            type: 'string',
+            enum: ['markdown', 'plaintext', 'javascript', 'typescript', 'python', 'bash', 'sh', 'json', 'yaml', 'html', 'css', 'sql'],
+            description: 'Programming language or file type',
+          },
+          content: { type: 'string', description: 'Full file content' },
+        },
+        required: ['name', 'language', 'content'],
+      },
+    },
+    {
+      name: 'edit_file',
+      description: 'Replace the full content of an existing file. Use this when the user asks you to modify, fix, or update an existing file.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          file_id: { type: 'string', description: 'The ID of the file to edit (starts with f_)' },
+          content: { type: 'string', description: 'The complete new content for the file' },
+        },
+        required: ['file_id', 'content'],
+      },
+    },
+  ];
+
   const createParams: Anthropic.MessageStreamParams = {
     model,
     max_tokens: 8096,
     messages: messages as Anthropic.MessageParam[],
+    tools,
     ...(systemPrompt ? { system: systemPrompt } : {}),
   };
 
@@ -56,6 +89,14 @@ export async function streamAnthropicMessage(params: StreamParams): Promise<Stre
     });
 
     const finalMessage = await stream.finalMessage();
+    for (const block of finalMessage.content) {
+      if (block.type === 'tool_use') {
+        onEvent('tool_use', {
+          tool_name: block.name,
+          tool_input: block.input,
+        });
+      }
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rawUsage = finalMessage.usage as any;

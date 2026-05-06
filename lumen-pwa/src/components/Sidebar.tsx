@@ -10,6 +10,8 @@ import {
   updateConversation,
 } from '../lib/api'
 import type { ConversationSummary, Project } from '../lib/api'
+import { FilesPanel } from './FilesPanel'
+import { useFilesStore } from '../stores/filesStore'
 
 function groupByDate(convs: ConversationSummary[]) {
   const now = new Date()
@@ -84,9 +86,10 @@ interface SidebarProps {
   /** Rendered at the very top of the sidebar panel, above nav items. */
   toolbarSlot?: React.ReactNode
   onNewChat?: () => void
+  onOpenFiles?: () => void
 }
 
-export function Sidebar({ onClose, onSettings, onOpenFeaturePanel, toolbarSlot, onNewChat }: SidebarProps) {
+export function Sidebar({ onClose, onSettings, onOpenFeaturePanel, toolbarSlot, onNewChat, onOpenFiles }: SidebarProps) {
   const { conversations, activeId, setActiveId } = useAppStore()
   const resetSession = useAppStore((s) => s.resetSession)
   const resetWorkspace = useWorkspaceStore((s) => s.resetWorkspace)
@@ -96,6 +99,7 @@ export function Sidebar({ onClose, onSettings, onOpenFeaturePanel, toolbarSlot, 
   const openCowork = useWorkspaceStore((s) => s.openCowork)
   const removeFromList = useWorkspaceStore((s) => s.removeFromList)
   const upsertInList = useWorkspaceStore((s) => s.upsertInList)
+  const fileCount = useFilesStore((s) => s.files.length)
 
   const [search, setSearch] = useState('')
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
@@ -276,6 +280,17 @@ export function Sidebar({ onClose, onSettings, onOpenFeaturePanel, toolbarSlot, 
             }
           />
           <NavRow
+            label="Files"
+            onClick={() => { onOpenFiles?.(); onClose?.() }}
+            badge={fileCount > 0 ? String(fileCount) : undefined}
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6" />
+              </svg>
+            }
+          />
+          <NavRow
             label="Customize"
             onClick={() => { onSettings?.(); onClose?.() }}
             icon={
@@ -296,6 +311,8 @@ export function Sidebar({ onClose, onSettings, onOpenFeaturePanel, toolbarSlot, 
             }
           />
         </div>
+
+        <FilesPanel />
 
         <div className="mx-3 mt-2 mb-2 shrink-0" style={{ height: '1px', background: 'var(--color-border)' }} />
 

@@ -3,6 +3,7 @@ import { MarkdownRenderer } from './MarkdownRenderer'
 import type { DisplayMessage } from '../stores/appStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { useAuthStore } from '../stores/authStore'
+import { FileCard } from './FileCard'
 
 function messageText(msg: DisplayMessage): string {
   if ('isStreaming' in msg && msg.isStreaming) return msg.content
@@ -243,10 +244,14 @@ export function MessageList({ messages, onResend, isStreaming }: MessageListProp
         }
 
         // AI message — no bubble, avatar on left
+        const fileBlocks = ('content' in msg ? (msg.content as Array<{ type: string; file?: unknown }>).filter((b) => b.type === 'file_event') : [])
         return (
           <div key={msg.id} className="flex gap-2.5 py-1.5">
             <LumenAvatar />
             <div className="flex-1 min-w-0 overflow-hidden pt-0.5">
+              {fileBlocks.map((b, idx) => (
+                <FileCard key={`${msg.id}-file-${idx}`} file={b.file as never} />
+              ))}
               {isEmpty ? (
                 <StreamingIndicator />
               ) : (

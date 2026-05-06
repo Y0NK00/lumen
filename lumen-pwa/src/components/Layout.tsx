@@ -9,6 +9,8 @@ import { TopCommandBar } from './TopCommandBar'
 import { useAppStore } from '../stores/appStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { createConversation } from '../lib/api'
+import { useFilesStore } from '../stores/filesStore'
+import { FileEditor } from './FileEditor'
 
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -18,6 +20,7 @@ export function Layout() {
   const { activeId, conversations, setActiveId } = useAppStore()
   const workspaceMode = useWorkspaceStore((s) => s.mode)
   const switchWorkspace = useWorkspaceStore((s) => s.switchWorkspace)
+  const openFile = useFilesStore((s) => s.openFile)
 
   const activeConv = conversations.find((c) => c.id === activeId)
 
@@ -99,6 +102,7 @@ export function Layout() {
             onSettings={() => setSettingsOpen(true)}
             onOpenFeaturePanel={setFeaturePanel}
             onNewChat={() => void handleNew()}
+            onOpenFiles={() => {}}
             toolbarSlot={
               <TopCommandBar
                 onOpenSettings={() => setSettingsOpen(true)}
@@ -125,6 +129,7 @@ export function Layout() {
               onSettings={() => { setSidebarOpen(false); setSettingsOpen(true) }}
               onOpenFeaturePanel={(p) => { setFeaturePanel(p); setSidebarOpen(false) }}
               onNewChat={() => { void handleNew(); setSidebarOpen(false) }}
+              onOpenFiles={() => setSidebarOpen(false)}
             />
           </div>
         </div>
@@ -235,7 +240,7 @@ export function Layout() {
         />
 
         <main className="flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden w-full">
-          <ChatPane />
+          {openFile ? <FileEditor file={openFile} /> : <ChatPane />}
         </main>
       </div>
     </div>

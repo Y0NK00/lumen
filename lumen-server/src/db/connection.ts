@@ -30,6 +30,23 @@ const migrations: string[] = [
   `ALTER TABLE conversations ADD COLUMN workspace TEXT NOT NULL DEFAULT 'chat'`,
   // v2: index for workspace-scoped conversation lists
   `CREATE INDEX IF NOT EXISTS idx_conv_workspace ON conversations(user_id, workspace) WHERE deleted_at IS NULL`,
+  `CREATE TABLE IF NOT EXISTS files (
+  id              TEXT PRIMARY KEY,
+  user_id         TEXT NOT NULL REFERENCES users(id),
+  project_id      TEXT REFERENCES projects(id),
+  conversation_id TEXT REFERENCES conversations(id),
+  name            TEXT NOT NULL,
+  language        TEXT NOT NULL DEFAULT 'markdown',
+  content         TEXT NOT NULL DEFAULT '',
+  size_bytes      INTEGER NOT NULL DEFAULT 0,
+  pinned          INTEGER NOT NULL DEFAULT 0,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  deleted_at      TEXT
+)`,
+  `CREATE INDEX IF NOT EXISTS idx_files_user ON files(user_id) WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_files_project ON files(project_id) WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_files_conv ON files(conversation_id) WHERE deleted_at IS NULL`,
 ];
 
 for (const sql of migrations) {

@@ -8,6 +8,7 @@ import { recordUsage } from '../db/repos/usage.js';
 import { listMemories } from '../db/repos/memory.js';
 import { streamAnthropicMessage, generateTitle, abortStream } from '../services/providers/anthropic.js';
 import { logger } from '../lib/logger.js';
+import { createFile, getFileById, updateFile } from '../db/repos/files.js';
 
 const sendMessageBody = z.object({
   content: z.string().min(1).max(100_000),
@@ -73,6 +74,18 @@ export async function messageRoutes(app: FastifyInstance) {
           // client disconnected
         }
       };
+      const toStub = (file: NonNullable<ReturnType<typeof getFileById>>) => ({
+        id: file.id,
+        userId: file.userId,
+        projectId: file.projectId,
+        conversationId: file.conversationId,
+        name: file.name,
+        language: file.language,
+        sizeBytes: file.sizeBytes,
+        pinned: file.pinned,
+        createdAt: file.createdAt,
+        updatedAt: file.updatedAt,
+      });
 
       sendEvent('message_created', { messageId: userMessage.id, role: 'user' });
       sendEvent('assistant_start', { messageId: assistantMessage.id });
@@ -105,7 +118,38 @@ export async function messageRoutes(app: FastifyInstance) {
           model,
           systemPrompt,
           messages: anthropicMessages,
-          onEvent: sendEvent,
+          onEvent: (event, data) => {
+            if (event !== 'tool_use') {
+              sendEvent(event, data);
+              return;
+            }
+            const d = data as { tool_name?: string; tool_input?: Record<string, unknown> };
+            const toolName = d.tool_name;
+            const input = d.tool_input ?? {};
+
+            if (toolName === 'create_file') {
+              const created = createFile(userId, {
+                name: String(input.name ?? 'untitled.txt'),
+                language: typeof input.language === 'string' ? input.language : 'plaintext',
+                content: typeof input.content === 'string' ? input.content : '',
+                conversationId,
+              });
+              sendEvent('file_event', { type: 'created', file: toStub(created) });
+              return;
+            }
+
+            if (toolName === 'edit_file') {
+              const fileId = typeof input.file_id === 'string' ? input.file_id : '';
+              const content = typeof input.content === 'string' ? input.content : '';
+              const updated = updateFile(fileId, userId, { content });
+              if (updated) {
+                sendEvent('file_event', { type: 'updated', file: toStub(updated) });
+              } else {
+                logger.warn({ userId, fileId }, 'edit_file tool: file not found or wrong user');
+              }
+              return;
+            }
+          },
         });
 
         const { updateMessageContent } = await import('../db/repos/messages.js');

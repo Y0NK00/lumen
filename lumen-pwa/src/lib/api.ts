@@ -95,7 +95,7 @@ export interface ServerMessage {
   id: string
   conversationId: string
   role: 'user' | 'assistant'
-  content: Array<{ type: string; text?: string }>
+  content: Array<{ type: string; text?: string; [key: string]: unknown }>
   finishReason: string | null
   createdAt: string
 }
@@ -351,6 +351,116 @@ export async function updateArtifact(
 
 export async function deleteArtifact(id: string): Promise<void> {
   await apiFetch(`/api/artifacts/${id}`, { method: 'DELETE' })
+}
+
+// ── Files ─────────────────────────────────────────────────────────────────────
+
+export interface FileStub {
+  id: string
+  userId: string
+  projectId: string | null
+  conversationId: string | null
+  name: string
+  language: string
+  sizeBytes: number
+  pinned: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface LumenFile extends FileStub {
+  content: string
+}
+
+export async function listFiles(opts?: {
+  project_id?: string
+  conversation_id?: string
+}): Promise<FileStub[]> {
+  const q = new URLSearchParams()
+  if (opts?.project_id) q.set('project_id', opts.project_id)
+  if (opts?.conversation_id) q.set('conversation_id', opts.conversation_id)
+  const suffix = q.toString() ? `?${q.toString()}` : ''
+  const data = await apiJSON<{ items: FileStub[] }>(`/api/files${suffix}`)
+  return data.items
+}
+
+export async function getFile(id: string): Promise<LumenFile> {
+  const data = await apiJSON<{ file: LumenFile }>(`/api/files/${id}`)
+  return data.file
+}
+
+export async function createFile(input: {
+  name: string
+  language?: string
+  content?: string
+  projectId?: string | null
+  conversationId?: string | null
+}): Promise<LumenFile> {
+  const data = await apiJSON<{ file: LumenFile }>('/api/files', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  return data.file
+}
+
+export async function updateFile(id: string, patch: {
+  name?: string
+  language?: string
+  content?: string
+  pinned?: boolean
+}): Promise<LumenFile> {
+  const data = await apiJSON<{ file: LumenFile }>(`/api/files/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+  return data.file
+}
+
+export async function deleteFile(id: string): Promise<void> {
+  await apiFetch(`/api/files/${id}`, { method: 'DELETE' })
+}
+
+export async function exportFile(id: string): Promise<string> {
+  const token = getToken()
+  const res = await fetch(`${BASE}/api/files/${id}/export`, {
+    method: 'GET',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new ApiError(
+      res.status,
+      body?.error?.code ?? 'UNKNOWN',
+      body?.error?.message ?? res.statusText
+    )
+  }
+  return res.text()
+}
+
+export async function uploadFile(name: string, language: string, content: string): Promise<LumenFile> {
+  const token = getToken()
+  const res = await fetch(`${BASE}/api/files/upload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'x-file-name': name,
+      'x-file-language': language,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: content,
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new ApiError(
+      res.status,
+      body?.error?.code ?? 'UNKNOWN',
+      body?.error?.message ?? res.statusText
+    )
+  }
+  const data = await res.json() as { file: LumenFile }
+  return data.file
 }
 
 // ── Scheduled tasks (Dispatch / phone triggers) ─────────────────────────────
