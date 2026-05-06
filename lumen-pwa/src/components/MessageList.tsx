@@ -244,7 +244,7 @@ export function MessageList({ messages, onResend, isStreaming }: MessageListProp
         }
 
         // AI message — no bubble, avatar on left
-        const fileBlocks = ('content' in msg ? (msg.content as Array<{ type: string; file?: unknown }>).filter((b) => b.type === 'file_event') : [])
+        const fileBlocks = (Array.isArray(msg.content) ? (msg.content as Array<{ type: string; file?: unknown }>).filter((b) => b.type === 'file_event') : [])
         return (
           <div key={msg.id} className="flex gap-2.5 py-1.5">
             <LumenAvatar />

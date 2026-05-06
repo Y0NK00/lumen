@@ -30,6 +30,7 @@ export function FileCard({ file }: { file: FileStub }) {
       <div className="mt-1 flex items-center gap-2">
         <button type="button" className="text-[11px]" style={{ color: 'var(--color-accent)' }} onClick={() => void open()}>Open</button>
         <button type="button" className="text-[11px]" style={{ color: 'var(--color-accent)' }} onClick={() => void download()}>Download</button>
+
       </div>
     </div>
   )
