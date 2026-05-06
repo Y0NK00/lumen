@@ -100,7 +100,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  Sentry.captureException(err);
   logger.error(err, 'fatal startup error');
   process.exit(1);
 });

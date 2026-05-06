@@ -112,6 +112,9 @@ export async function messageRoutes(app: FastifyInstance) {
       }
 
       try {
+        // Track any text injected for tool confirmations so we can save it to DB
+        let injectedText = '';
+
         const result = await streamAnthropicMessage({
           conversationId,
           assistantMessageId: assistantMessage.id,
@@ -119,6 +122,15 @@ export async function messageRoutes(app: FastifyInstance) {
           systemPrompt,
           messages: anthropicMessages,
           onEvent: (event, data) => {
+            // Intercept 'done' so we can inject a text_delta first if files were created
+            if (event === 'done') {
+              if (injectedText) {
+                sendEvent('text_delta', { delta: injectedText });
+              }
+              sendEvent('done', data);
+              return;
+            }
+
             if (event !== 'tool_use') {
               sendEvent(event, data);
               return;
@@ -135,6 +147,7 @@ export async function messageRoutes(app: FastifyInstance) {
                 conversationId,
               });
               sendEvent('file_event', { type: 'created', file: toStub(created) });
+              injectedText += (injectedText ? '\n' : '') + `Created **${created.name}** (${created.language})`;
               return;
             }
 
@@ -144,6 +157,7 @@ export async function messageRoutes(app: FastifyInstance) {
               const updated = updateFile(fileId, userId, { content });
               if (updated) {
                 sendEvent('file_event', { type: 'updated', file: toStub(updated) });
+                injectedText += (injectedText ? '\n' : '') + `Updated **${updated.name}**`;
               } else {
                 logger.warn({ userId, fileId }, 'edit_file tool: file not found or wrong user');
               }
@@ -155,7 +169,7 @@ export async function messageRoutes(app: FastifyInstance) {
         const { updateMessageContent } = await import('../db/repos/messages.js');
         updateMessageContent(
           assistantMessage.id,
-          [{ type: 'text', text: result.content }],
+          [{ type: 'text', text: result.content || injectedText }],
           result.finishReason
         );
 
