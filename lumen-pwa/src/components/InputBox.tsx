@@ -31,7 +31,7 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false, onSyst
     const el = textareaRef.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 180)}px`
+    el.style.height = `${Math.min(el.scrollHeight, 320)}px`
     setHasText(el.value.trim().length > 0)
   }, [])
 
@@ -176,7 +176,7 @@ export function InputBox({ onSend, onStop, isStreaming, disabled = false, onSyst
             onKeyDown={handleKeyDown}
             className="flex-1 min-w-0 resize-none bg-transparent border-0 text-[16px] text-text-primary
                        placeholder:text-text-muted outline-none leading-[1.6]
-                       max-h-[180px] overflow-y-auto py-3 px-2 min-h-[2.75rem]"
+                       max-h-[320px] overflow-y-auto py-3 px-2 min-h-[3.5rem]"
           />
 
           {/* Action button — Stop while streaming, Send otherwise */}

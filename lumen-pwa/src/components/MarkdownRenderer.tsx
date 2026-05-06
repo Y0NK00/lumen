@@ -42,9 +42,10 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
         rehypePlugins={rehypePlugins}
         components={{
           code({ className, children, ...props }) {
-            // Treat as block if it has a language class OR contains newlines (unfenced blocks)
-            const isBlock = className?.startsWith('language-') || String(children).includes('\n')
-            const lang = className?.replace('language-', '') ?? ''
+            // After rehype-highlight, className is e.g. "hljs language-bash"
+            // Use includes() and regex so both pre- and post-highlight forms work
+            const isBlock = className?.includes('language-') || String(children).includes('\n')
+            const lang = className?.match(/language-([^\s]+)/)?.[1] ?? ''
             const codeText = String(children).replace(/\n$/, '')
 
             if (!isBlock) {
